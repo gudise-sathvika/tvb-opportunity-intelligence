@@ -1,0 +1,71 @@
+/**
+ * Design tokens (Phase A brief §5).
+ *
+ * One vocabulary, two themes. Light is the warm cream/beige TVB look; dark is
+ * the deep navy look. Accents are the restrained burgundy/gold pairing on light
+ * and the blue on dark. Border and surface tokens step in two shades so cards
+ * and dividers can sit on top of each other without harsh lines.
+ */
+
+:root {
+  --bg: #f6f1e7;
+  --surface: #fffdf8;
+  --surface-2: #f1ead9;
+  --border: #ddd2bd;
+  --border-strong: #c8b99a;
+  --text: #26201a;
+  --text-muted: #6f6555;
+  --accent: #7a1f2b;
+  --accent-strong: #5e1620;
+  --accent-soft: #f3e4e6;
+  --gold: #b08a3e;
+  --warn-bg: #fff3d6;
+  --warn-border: #d9a441;
+  --warn-text: #7a5600;
+  --focus: #9c2340;
+  --shadow-1: 0 1px 2px rgba(38, 32, 26, 0.06), 0 6px 18px rgba(38, 32, 26, 0.05);
+  --shadow-2: 0 2px 6px rgba(38, 32, 26, 0.09), 0 16px 40px rgba(38, 32, 26, 0.08);
+  --chart-1: #7a1f2b;
+  --chart-2: #155e63;
+  --chart-3: #9a6a00;
+  --chart-4: #5b4b8a;
+  --chart-5: #1d4ed8;
+  --chart-6: #8a6d3b;
+  --chart-7: #3f6212;
+  --chart-8: #6b6250;
+  --chart-blank: #94a3b8;
+  --chart-track: #ece4d4;
+  --motion-fast: 0.12s;
+  --radius: 10px;
+  --radius-sm: 6px;
+}
+
+[data-theme='dark'] {
+  --bg: #0c1424;
+  --surface: #16223a;
+  --surface-2: #101a2e;
+  --border: #2c3b57;
+  --border-strong: #3d5073;
+  --text: #f2ede4;
+  --text-muted: #a9b4c9;
+  --accent: #6d9ee8;
+  --accent-strong: #8db6f0;
+  --accent-soft: #1b2c4a;
+  --gold: #d8b25f;
+  --warn-bg: #2a2410;
+  --warn-border: #c79a3a;
+  --warn-text: #f0d79a;
+  --focus: #8db6f0;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 18px rgba(0, 0, 0, 0.28);
+  --shadow-2: 0 2px 8px rgba(0, 0, 0, 0.35), 0 18px 44px rgba(0, 0, 0, 0.34);
+  --chart-1: #e0a4ad;
+  --chart-2: #7fd4d9;
+  --chart-3: #e6c877;
+  --chart-4: #b7a8e0;
+  --chart-5: #93b4f5;
+  --chart-6: #d8c19a;
+  --chart-7: #a6c47a;
+  --chart-8: #cbd5e1;
+  --chart-blank: #64748b;
+  --chart-track: #263449;
+}

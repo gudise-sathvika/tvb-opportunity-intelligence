@@ -1,0 +1,62 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+dist-ssr/
+build/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Local environment
+.env
+.env.local
+.env.*.local
+
+# TypeScript incremental build info
+*.tsbuildinfo
+
+# Generated vault snapshot data (produced by `npm run import:data`).
+# These are build artifacts derived from a read-only source vault and must
+# never be committed.
+src/data/generated/
+
+# Local recoverable snapshot of the source vault's content files, taken by
+# the importer before extraction. Contains copies of source-vault records and
+# must never be committed.
+.vault-snapshot/
+
+# SHA-256 source-integrity manifests written by the importer.
+.import-manifests/
+
+# Phase 5 browser-QA artefacts. Screenshots and Playwright run output are
+# regenerable from the suite, and the test-results copies can include a page
+# snapshot of vault records.
+qa/.artifacts/
+qa/screenshots/
+qa/*.png
+qa/.report-failures.txt
+qa-run-*.log
+.phase5-baseline.txt
+powershell.exe
+start-preview.ps1

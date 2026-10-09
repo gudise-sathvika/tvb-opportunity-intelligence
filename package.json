@@ -1,0 +1,43 @@
+{
+  "name": "tvb-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "TVB Opportunity Intelligence frontend.",
+  "scripts": {
+    "dev": "vite",
+    "predev": "node scripts/ensure-snapshot.mjs",
+    "build": "tsc -b && vite build",
+    "prebuild": "node scripts/ensure-snapshot.mjs",
+    "preview": "vite preview",
+    "serve": "tsx server/serve.ts",
+    "typecheck": "tsc -b",
+    "pretypecheck": "node scripts/ensure-snapshot.mjs",
+    "ensure:snapshot": "node scripts/ensure-snapshot.mjs",
+    "test:data": "tsx --test src/data/selectors.test.ts src/data/procurement.test.ts src/data/documents.test.ts src/data/funding-filters.test.ts src/data/bootstrap.test.ts src/analytics/dashboard.test.ts src/import/schema-validation.test.ts src/import/bid-validation.test.ts src/import/bid-gates.test.ts src/import/contract-validation.test.ts src/import/contract-gates.test.ts src/import/procurement-match.test.ts",
+    "pretest:data": "node scripts/ensure-snapshot.mjs",
+    "test:automation": "tsx --test src/automation/*.test.ts",
+    "test:live": "tsx --test src/live-source/*.test.ts src/live-source/ted-bridge/*.test.ts src/live-source/usaspending-bridge/*.test.ts src/live-source/grantsgov-bridge/*.test.ts src/live-source/eu-sedia-bridge/*.test.ts server/*.test.ts",
+    "test:vault": "tsx --test src/vault-writer/*.test.ts src/vault-bridge/*.test.ts",
+    "import:data": "tsx src/import/cli.ts",
+    "test:qa": "playwright test --config playwright.config.ts",
+    "test:qa:report": "playwright show-report qa/.artifacts/html-report"
+  },
+  "dependencies": {
+    "gray-matter": "^4.0.3",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-router-dom": "^7.6.0",
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^24.19.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.4.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.8.0",
+    "vite": "^6.3.0"
+  }
+}

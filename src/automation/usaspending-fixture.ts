@@ -1,0 +1,11 @@
+/**
+ * Byte-for-byte recording of one real USAspending search response
+ * (`api.usaspending.gov/api/v2/search/spending_by_award/`, award_type_code 02
+ * "grants", keyword "solar energy", limit 3), fetched on 2026-10-09. Used by
+ * `usaspending-adapter.test.ts` so tests never touch the live internet.
+ */
+
+export const USA_SPENDING_RECORDING_KEYWORD = 'solar energy'
+export const USA_SPENDING_RECORDING_OBSERVED_AT = '2026-10-09T03:32:19.290Z'
+
+export const USA_SPENDING_SEARCH_RESPONSE_RECORDING = `{"spending_level":"awards","limit":3,"results":[{"internal_id":260355439,"Award ID":"DEEE0001531","Recipient Name":"SWINOMISH INDIAN TRIBAL COMMUNITY","Award Amount":33429.0,"Description":"TAS::89 0331::TAS RECOVERY    RECOVERY ACT: SWINOMISH SOLAR ENERGY PRODUCTION & EDUCATIONAL DEMONSTRATION PROJECT","Start Date":"2009-12-22","Awarding Agency":"Department of Energy","awarding_agency_id":930,"agency_slug":"department-of-energy","generated_internal_id":"ASST_NON_DEEE0001531_089"},{"internal_id":260355273,"Award ID":"DEEE0001251","Recipient Name":"NATIVE VILLAGE OF PERRYVILLE","Award Amount":37700.0,"Description":"TAS::89 0331::TAS RECOVERY    RECOVERY:  NATIVE VILLAGE OF PERRYVILLE - RENEWABLE SOLAR ENERGY TECHNOLOGY","Start Date":"2009-12-21","Awarding Agency":"Department of Energy","awarding_agency_id":930,"agency_slug":"department-of-energy","generated_internal_id":"ASST_NON_DEEE0001251_089"},{"internal_id":260356190,"Award ID":"DEEE0002643","Recipient Name":"YERINGTON PAIUTE TRIBE","Award Amount":26200.0,"Description":"TAS::89 0331::TAS RECOVERY  RECOVERY ACT: YERINGTON PAIUTE TRIBAL SOLAR ENERGY PROJECT","Start Date":"2009-11-24","Awarding Agency":"Department of Energy","awarding_agency_id":930,"agency_slug":"department-of-energy","generated_internal_id":"ASST_NON_DEEE0002643_089"}],"page_metadata":{"page":1,"hasNext":true,"last_record_unique_id":260356190,"last_record_sort_value":"1259020800000"},"messages":["For searches, time period start and end dates are currently limited to an earliest date of 2007-10-01.  For data going back to 2000-10-01, use either the Custom Award Download feature on the website or one of our download or bulk_download API endpoints as listed on https://api.usaspending.gov/docs/endpoints. "]}`
