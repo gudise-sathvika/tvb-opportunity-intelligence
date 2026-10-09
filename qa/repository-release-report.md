@@ -1,17 +1,19 @@
 # Repository Release Report — Cleanup & Initial Commit
 
-Status: **Complete (cleanup + local commit).** The repository has a first commit.
-The GitHub remote is **not** configured yet — push awaits the repository URL.
+Status: **Complete.** Cleanup, verification, initial commit, and push all done.
 
 ## 1. Repository state
 
 | Fact | Value |
 |---|---|
-| Branch | `master` |
+| Branch | `master` (tracks `origin/master`) |
 | Initial commit | `fa54e20 Initial commit: TVB Opportunity Intelligence` |
-| Files committed | **309** |
-| Remote | **none configured** (push blocked until a URL is supplied) |
-| Working tree | clean after commit |
+| Release report commit | `9892759 Add repository release report` |
+| Files committed (initial) | **309** |
+| Remote | `origin` → `https://github.com/gudise-sathvika/tvb-opportunity-intelligence.git` |
+| Remote state before push | reachable, **no refs** (empty) → safe, non-destructive push |
+| Push outcome | `master -> master` **[new branch]**, exit 0 (no force) |
+| Working tree | clean after commits |
 
 ## 2. Removed / ignored (cleanup)
 
@@ -65,7 +67,6 @@ Integrity: `src/data/generated/opportunity-data.json` md5 **unchanged**
 - **`npm run test:qa` output capture:** the harness returned no captured stdout on two
   attempts; the suite was last known green (366 passed / 3 skipped / 0 failed, the 3
   skips pre-existing e.g. BUG-1). Re-run directly (`npx playwright test`) to confirm.
-- **Push blocked:** configure the remote (`git remote add origin <url>`) and
-  `git push -u origin master` once the repository URL is provided.
+- **Push:** completed — `origin` configured, `master` pushed (no force-push).
 - Out of scope: verify Grants.gov live and promote `SU-GRANTS-001` to `AVAILABLE`;
   wire the Grants.gov store/UI; server auth hardening if ever exposed beyond loopback.
