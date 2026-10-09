@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import SegmentedTabs from '../navigation/SegmentedTabs'
 import type { ReviewStatus } from '../../automation/review-queue'
-import { REVIEW_STATUSES } from '../../automation/review-queue'
+import { REVIEW_STATUSES, filterReviewItemsByRun } from '../../automation/review-queue'
 import { reviewFixtureStore } from '../../automation/review-fixture'
 import { ReviewStatusBadge } from './ReviewStatusBadge'
 import { rfpDisplay } from '../vocabulary'
@@ -27,8 +27,12 @@ import { getRecord, titleOf } from '../../data/selectors'
 export default function ReviewQueue() {
   const [params] = useSearchParams()
   const filter = resolveReviewFilter(params.get('status'))
+  const runId = params.get('run')
 
-  const items: readonly ReviewItem[] = reviewFixtureStore.items()
+  const allItems: readonly ReviewItem[] = reviewFixtureStore.items()
+  const items: readonly ReviewItem[] = runId !== null && runId.trim() !== ''
+    ? filterReviewItemsByRun(allItems, runId)
+    : allItems
 
   const visible = filter === 'all' ? items : items.filter((entry) => entry.reviewStatus === filter)
 
@@ -48,6 +52,13 @@ export default function ReviewQueue() {
           against their discovery evidence, and nothing is written to any record or vault file.
         </p>
       </header>
+
+      {runId !== null && runId.trim() !== '' ? (
+        <p className="dg-note dg-banner" role="note">
+          Scoped to discovery run <code className="idbadge">{runId}</code>. Seeded test fixtures and
+          other runs are hidden here; remove the <code>run</code> parameter to see the full queue.
+        </p>
+      ) : null}
 
       <div className="statgrid review-stats" role="group" aria-label="Review queue summary">
         {REVIEW_FILTERS.filter((f) => f.status !== null).map((f) => (

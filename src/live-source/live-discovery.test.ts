@@ -103,6 +103,60 @@ test('finishRun hands every live candidate into the real review queue', async ()
   ])
 })
 
+test('the ingest gate keeps only open notices actionable and preserves the rest', async () => {
+  const openNotice = {
+    'notice-type': 'cn-standard',
+    'publication-number': '700001-2026',
+    'notice-title': { eng: 'Open contract notice' },
+    deadline: '2099-01-01',
+    links: { html: { eng: 'https://ted.europa.eu/en/notice/-/detail/700001-2026' } },
+  }
+  const awardNotice = {
+    'notice-type': 'can-standard',
+    'publication-number': '700002-2026',
+    'notice-title': { eng: 'Award notice' },
+    links: { html: { eng: 'https://ted.europa.eu/en/notice/-/detail/700002-2026' } },
+  }
+  const noDeadlineNotice = {
+    'notice-type': 'cn-standard',
+    'publication-number': '700003-2026',
+    'notice-title': { eng: 'Contract notice without a deadline' },
+    links: { html: { eng: 'https://ted.europa.eu/en/notice/-/detail/700003-2026' } },
+  }
+  const body = JSON.stringify({ notices: [openNotice, awardNotice, noDeadlineNotice], totalNoticeCount: 3, timedOut: false })
+
+  const store = createLiveTedDiscovery({
+    bridge: async () => ({ ok: true, status: 200, body }),
+    requestedAt: REQUESTED_AT,
+  })
+  const context = store.beginRun({})
+  const company = await store.runCompany(context, 'Aavo')
+
+  // All three records are preserved on the raw candidate pool...
+  assert.equal(company.candidates.length, 3)
+  // ...but only the future-deadline contract notice is actionable-open.
+  assert.deepEqual(
+    company.actionableCandidates?.map((candidate) => candidate.sourceRecordId),
+    ['700001-2026'],
+  )
+  assert.deepEqual(
+    company.excludedCandidates?.map((candidate) => candidate.sourceRecordId),
+    ['700002-2026', '700003-2026'],
+  )
+  for (const candidate of company.excludedCandidates ?? []) {
+    assert.equal(candidate.provenance.sourceId, TED_SOURCE_ID, 'excluded records keep full provenance')
+  }
+})
+
+test('the no-deadline recorded TED notices are all excluded from the actionable pool', async () => {
+  const store = createLiveTedDiscovery({ bridge: capturingBridge(), requestedAt: REQUESTED_AT })
+  const context = store.beginRun({ keyword: 'solar energy' })
+  const company = await store.runCompany(context, 'Aavo')
+  assert.equal(company.candidates.length, 3)
+  assert.equal(company.actionableCandidates?.length, 0, 'no recorded notice has a published deadline')
+  assert.equal(company.excludedCandidates?.length, 3)
+})
+
 test('reset clears live history and restarts the run id counter', async () => {
   const store = createLiveTedDiscovery({ bridge: capturingBridge(), requestedAt: REQUESTED_AT })
   const context = store.beginRun({ keyword: 'solar energy' })

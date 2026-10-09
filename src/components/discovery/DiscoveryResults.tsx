@@ -1,8 +1,14 @@
 import { Link } from 'react-router-dom'
+import type { DiscoveryCandidate } from '../../automation/candidate'
 import type { DiscoveryCompanyResult, DiscoveryRunOutcome } from '../../automation/discovery-fixture'
-import { EU_SEDIA_SOURCE_ID, GRANTS_GOV_SOURCE_ID, USA_SPENDING_SOURCE_ID } from '../../automation/registry'
-import { evaluateOpenOpportunity } from '../../automation/grantsgov-gate'
-import { evaluateEuOpenOpportunity } from '../../automation/eu-sedia-gate'
+import {
+  EU_SEDIA_SOURCE_ID,
+  GRANTS_GOV_SOURCE_ID,
+  TED_SOURCE_ID,
+  USA_SPENDING_SOURCE_ID,
+} from '../../automation/registry'
+import { classifyOpportunityState } from '../../automation/opportunity-status'
+import type { OpportunityState } from '../../automation/opportunity-status'
 import AutomationWorkflow from './AutomationWorkflow'
 import {
   COMPANY_STATE_FOR_OUTCOME,
@@ -147,91 +153,124 @@ function euSediaNote(outcome: DiscoveryRunOutcome): string {
   return `${lead} ${tail}`
 }
 
-interface GrantsGovCounts {
+interface SourceCounts {
   retrieved: number
   open: number
   excluded: number
 }
 
-/** Phase 20C counts: retrieved, passed the open gate, and excluded with a reason. */
-function grantsGovCounts(company: DiscoveryCompanyResult, now: string): GrantsGovCounts {
+/**
+ * Phase 22: retrieved / passed the shared open-opportunity classifier / not
+ * open. One classifier for grants, EU, TED and USAspending keeps the counts and
+ * the per-record chips consistent.
+ */
+function sourceCounts(company: DiscoveryCompanyResult, now: string): SourceCounts {
   let open = 0
   for (const candidate of company.candidates) {
-    if (evaluateOpenOpportunity(candidate, now).open) open += 1
+    if (classifyOpportunityState(candidate, now).state === 'open') open += 1
   }
   const retrieved = company.candidates.length
   return { retrieved, open, excluded: retrieved - open }
 }
 
-/** Phase 20C: real opportunity detail — title, agency, status, close date, official link, gate verdict. */
-function GrantsGovCandidates({ company, now }: { company: DiscoveryCompanyResult; now: string }) {
+/** Official link label per source; unknown sources fall back to a neutral label. */
+const LINK_LABEL: Record<string, string> = {
+  [GRANTS_GOV_SOURCE_ID]: 'Official Grants.gov record',
+  [EU_SEDIA_SOURCE_ID]: 'Official EU portal record',
+  [TED_SOURCE_ID]: 'Official TED notice',
+  [USA_SPENDING_SOURCE_ID]: 'Official USAspending award',
+}
+
+/** The state chip. `open` is the ONLY actionable bucket; everything else is excluded. */
+function OpportunityChip({ state, reason }: { state: OpportunityState; reason: string }) {
+  if (state === 'open') return <span className="dg-chip dg-chip--completed">Open (confirmed)</span>
+  if (state === 'forthcoming') return <span className="dg-chip dg-chip--running">Forthcoming</span>
+  return <span className="dg-chip dg-chip--failed">Excluded: {reason}</span>
+}
+
+/**
+ * Phase 22: the shared opportunity list. Open records are listed first; a record
+ * is never claimed to match the company (the pool is shared, not matched).
+ */
+function OpportunityCandidates({
+  candidates,
+  now,
+  sourceId,
+}: {
+  candidates: readonly DiscoveryCandidate[]
+  now: string
+  sourceId: string
+}) {
+  const ordered = [...candidates].sort((a, b) => {
+    const ra = classifyOpportunityState(a, now).state === 'open' ? 0 : 1
+    const rb = classifyOpportunityState(b, now).state === 'open' ? 0 : 1
+    return ra - rb
+  })
   return (
     <ul className="dg-candidates">
-      {company.candidates.map((candidate) => {
-        const verdict = evaluateOpenOpportunity(candidate, now)
+      {ordered.map((candidate) => {
+        const verdict = classifyOpportunityState(candidate, now)
         return (
           <li key={candidate.candidateId} className="dg-candidate">
             <a className="dg-candidate__title" href={candidate.sourceUrl} target="_blank" rel="noreferrer">
               {candidate.sourceTitle}
             </a>
             <span className="dg-candidate__meta">
-              {candidate.sourceOrganization ?? 'Unknown agency'} · status {candidate.sourceStatus ?? 'unknown'} · closes{' '}
-              {candidate.sourceDeadline ?? '—'}
-            </span>
-            <a className="dg-candidate__link" href={candidate.sourceUrl} target="_blank" rel="noreferrer">
-              Official Grants.gov record
-            </a>
-            <span className={`dg-chip dg-chip--${verdict.open ? 'completed' : 'failed'}`}>
-              {verdict.open ? 'Open (confirmed)' : `Excluded: ${verdict.reasons[0] ?? 'failed gate'}`}
-            </span>
-          </li>
-        )
-      })}
-    </ul>
-  )
-}
-
-/** Phase 21C EU counts: retrieved, passed the open-call gate, and excluded. */
-function euSediaCounts(company: DiscoveryCompanyResult, now: string): GrantsGovCounts {
-  let open = 0
-  for (const candidate of company.candidates) {
-    if (evaluateEuOpenOpportunity(candidate, now).open) open += 1
-  }
-  const retrieved = company.candidates.length
-  return { retrieved, open, excluded: retrieved - open }
-}
-
-/** Phase 21C: real EU record detail — title, award type, status, deadline, official link, gate verdict. */
-function EuSediaCandidates({ company, now }: { company: DiscoveryCompanyResult; now: string }) {
-  return (
-    <ul className="dg-candidates">
-      {company.candidates.map((candidate) => {
-        const verdict = evaluateEuOpenOpportunity(candidate, now)
-        return (
-          <li key={candidate.candidateId} className="dg-candidate">
-            <a className="dg-candidate__title" href={candidate.sourceUrl} target="_blank" rel="noreferrer">
-              {candidate.sourceTitle}
-            </a>
-            <span className="dg-candidate__meta">
+              {candidate.sourceOrganization ? `${candidate.sourceOrganization} · ` : ''}
               {candidate.sourceRawType ?? 'UNKNOWN'} · status {candidate.sourceStatus ?? 'unknown'} · deadline{' '}
               {candidate.sourceDeadline ?? '—'}
             </span>
             <a className="dg-candidate__link" href={candidate.sourceUrl} target="_blank" rel="noreferrer">
-              Official EU portal record
+              {LINK_LABEL[sourceId] ?? 'Official record'}
             </a>
-            <span className={`dg-chip dg-chip--${verdict.open ? 'completed' : 'failed'}`}>
-              {verdict.open ? 'Open (confirmed)' : `Excluded: ${verdict.reasons[0] ?? 'failed gate'}`}
-            </span>
+            <OpportunityChip state={verdict.state} reason={verdict.reason} />
           </li>
         )
       })}
     </ul>
   )
+}
+
+/** Phase 23: records that FAILED the ingest gate — preserved, never presented as open. */
+function ExcludedCandidates({ candidates, now }: { candidates: readonly DiscoveryCandidate[]; now: string }) {
+  if (candidates.length === 0) return null
+  return (
+    <details className="dg-excluded" data-testid="excluded-candidates">
+      <summary>Excluded at ingest: {candidates.length} not actionable</summary>
+      <ul className="dg-candidates">
+        {candidates.map((candidate) => {
+          const verdict = classifyOpportunityState(candidate, now)
+          return (
+            <li key={candidate.candidateId} className="dg-candidate">
+              <span className="dg-candidate__title">{candidate.sourceTitle}</span>
+              <span className="dg-candidate__meta">
+                {candidate.sourceRawType ?? 'UNKNOWN'} · status {candidate.sourceStatus ?? 'unknown'} · deadline{' '}
+                {candidate.sourceDeadline ?? '—'}
+              </span>
+              <OpportunityChip state={verdict.state} reason={verdict.reason} />
+            </li>
+          )
+        })}
+      </ul>
+    </details>
+  )
+}
+
+/** The one source a live run queried, read from the run provenance. */
+function runSourceId(outcome: DiscoveryRunOutcome): string | null {
+  for (const company of outcome.companies) {
+    for (const result of company.sourceResults) {
+      if (result.sourceId !== '') return result.sourceId
+    }
+  }
+  return null
 }
 
 export default function DiscoveryResults({ outcome }: { outcome: DiscoveryRunOutcome }) {
   const isLiveFunding = outcome.scenario === 'live' && outcome.domain === 'funding'
   const banner = isLiveFunding ? liveFundingBanner(outcome) : null
+  const sourceId = runSourceId(outcome)
+  const isHistoricalSource = sourceId === USA_SPENDING_SOURCE_ID
   return (
     <section className="card dg-panel" aria-label="Discovery result">
       <h2 className="dg-panel__title">Run result</h2>
@@ -269,13 +308,10 @@ export default function DiscoveryResults({ outcome }: { outcome: DiscoveryRunOut
       <ul className="dg-results">
         {outcome.companies.map((company) => {
           const state = COMPANY_STATE_FOR_OUTCOME[company.outcome]
-          const isGrantsGov = banner?.sourceId === GRANTS_GOV_SOURCE_ID
-          const isEuSedia = banner?.sourceId === EU_SEDIA_SOURCE_ID
-          const gv = isGrantsGov
-            ? grantsGovCounts(company, outcome.requestedAt)
-            : isEuSedia
-              ? euSediaCounts(company, outcome.requestedAt)
-              : null
+          const hasOpportunityRecords =
+            sourceId !== null &&
+            [GRANTS_GOV_SOURCE_ID, EU_SEDIA_SOURCE_ID, TED_SOURCE_ID, USA_SPENDING_SOURCE_ID].includes(sourceId)
+          const gv = hasOpportunityRecords ? sourceCounts(company, outcome.requestedAt) : null
           return (
             <li key={company.companyId}>
               <details className="dg-result">
@@ -308,10 +344,21 @@ export default function DiscoveryResults({ outcome }: { outcome: DiscoveryRunOut
                   </ul>
                   {company.candidates.length === 0 ? (
                     <p className="dg-empty">{emptyMessage(company)}</p>
-                  ) : isGrantsGov ? (
-                    <GrantsGovCandidates company={company} now={outcome.requestedAt} />
-                  ) : isEuSedia ? (
-                    <EuSediaCandidates company={company} now={outcome.requestedAt} />
+                  ) : hasOpportunityRecords ? (
+                    <>
+                      {isHistoricalSource ? (
+                        <p className="dg-note" role="note">
+                          Historical context — obligated federal award records, NOT open grant solicitations.
+                          This shows what has already been awarded, not what is available to apply for.
+                        </p>
+                      ) : null}
+                      <OpportunityCandidates
+                        candidates={company.actionableCandidates ?? company.candidates}
+                        now={outcome.requestedAt}
+                        sourceId={sourceId ?? ''}
+                      />
+                      <ExcludedCandidates candidates={company.excludedCandidates ?? []} now={outcome.requestedAt} />
+                    </>
                   ) : (
                     <ul className="dg-candidates">
                       {company.candidates.map((candidate) => (
@@ -332,7 +379,7 @@ export default function DiscoveryResults({ outcome }: { outcome: DiscoveryRunOut
           View Review Queue
         </Link>
         {outcome.needsReview > 0 ? (
-          <Link to="/review" className="btn">
+          <Link to={`/review?run=${encodeURIComponent(outcome.runId)}`} className="btn">
             Review {outcome.needsReview} {outcome.needsReview === 1 ? 'candidate' : 'candidates'}
           </Link>
         ) : null}

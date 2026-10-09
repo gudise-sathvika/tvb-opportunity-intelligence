@@ -144,6 +144,18 @@ export interface DiscoveryCompanyResult {
   needsReview: number
   sourceResults: readonly SourceRunResult[]
   candidates: readonly DiscoveryCandidate[]
+  /**
+   * Phase 23 ingest gate (optional). The subset of `candidates` that passed the
+   * shared open-opportunity gate (`isActionableOpen`) at ingest — the only
+   * records that may be treated or presented as actionable-open. Absent on
+   * fixture/scenario runs that predate the gate.
+   */
+  actionableCandidates?: readonly DiscoveryCandidate[]
+  /**
+   * Phase 23: the records that FAILED the ingest gate. Never dropped — kept
+   * here (with full `candidates` provenance) so exclusions remain auditable.
+   */
+  excludedCandidates?: readonly DiscoveryCandidate[]
 }
 
 export interface DiscoveryRunOutcome {

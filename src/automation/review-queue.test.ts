@@ -32,6 +32,7 @@ import {
   canTransition,
   createReviewItem,
   createReviewQueue,
+  filterReviewItemsByRun,
   nextReviewStatuses,
   reviewIdFor,
   validateReviewDecision,
@@ -292,6 +293,38 @@ test('duplicate twins keep their own queue items and any identical snapshot gets
   const candidate = procurementCandidates()[0] ?? assert.fail('expected a candidate')
   assert.equal(reviewIdFor(candidate.candidateId, 'NORMALIZED'), 'RI:DC:SU-FX-001:FX-P-1001:NORMALIZED')
   assert.equal(reviewIdFor(candidate.candidateId, 'NORMALIZED', 2), 'RI:DC:SU-FX-001:FX-P-1001:NORMALIZED#2')
+})
+
+test('filterReviewItemsByRun scopes a cumulative store to exactly one run', () => {
+  const procItems = createReviewQueue(procurementCandidates())
+  const fundItems = createReviewQueue(fundingCandidates())
+  const store = [...procItems, ...fundItems]
+
+  const procScoped = filterReviewItemsByRun(store, 'RUN-PHASEE-P')
+  assert.equal(procScoped.length, procItems.length)
+  assert.ok(procScoped.every((item) => item.discoveryRunId === 'RUN-PHASEE-P'))
+
+  const fundScoped = filterReviewItemsByRun(store, 'RUN-PHASEE-F')
+  assert.equal(fundScoped.length, fundItems.length)
+  assert.ok(fundScoped.every((item) => item.discoveryRunId === 'RUN-PHASEE-F'))
+
+  assert.equal(filterReviewItemsByRun(store, 'RUN-DOES-NOT-EXIST').length, 0)
+})
+
+test('filterReviewItemsByRun matches a run\'s per-company child ids and never mutates its input', () => {
+  const [item] = createReviewQueue(procurementCandidates())
+  if (item === undefined) assert.fail('expected a review item')
+  const childItem: ReviewItem = { ...item, discoveryRunId: 'RUN-EU-0001-ACME' }
+  const store: readonly ReviewItem[] = [item, childItem]
+  const snapshot = JSON.stringify(store)
+
+  const scoped = filterReviewItemsByRun(store, 'RUN-EU-0001')
+  assert.equal(scoped.length, 1, 'the child-id item matches its parent run')
+  assert.equal(scoped[0]?.discoveryRunId, 'RUN-EU-0001-ACME')
+
+  assert.equal(filterReviewItemsByRun(store, '  ').length, 2, 'blank run id returns the whole store')
+  assert.equal(filterReviewItemsByRun(store, '').length, 2, 'empty run id returns the whole store')
+  assert.equal(JSON.stringify(store), snapshot, 'the input store is never mutated')
 })
 
 test('an approval decision applies and records the full audit entry', () => {

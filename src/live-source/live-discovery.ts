@@ -38,6 +38,7 @@ import type { SourceRegistry } from '../automation/registry'
 import { DEFAULT_SOURCE_REGISTRY, TED_SOURCE_ID } from '../automation/registry'
 import { reviewFixtureStore } from '../automation/review-fixture'
 import { createReviewQueue, reviewStatusForCandidate } from '../automation/review-queue'
+import { partitionByActionability } from '../automation/opportunity-status'
 import { createTedAdapter } from '../automation/ted-adapter'
 import type { TedTransport } from '../automation/ted-adapter'
 import { TED_BRIDGE_SEARCH_PATH } from './ted-bridge/contract'
@@ -279,6 +280,11 @@ export function createLiveTedDiscovery(options: {
       const input = inputFor(context, cleaned)
       const result = orchestrateDiscoveryRun(input, dependenciesFor(adapter))
       const candidates = result.candidates.filter((candidate) => matchesKeyword(candidate, context.keyword))
+      // Phase 23 ingest gate: only records the shared classifier marks `open`
+      // may enter the actionable pool. Everything else is preserved as
+      // `excludedCandidates` (never dropped) and can never be presented as an
+      // open opportunity.
+      const { actionable, excluded } = partitionByActionability(candidates, context.requestedAt)
       const needsReview = candidates.filter(candidateNeedsReview).length
       return deepFreeze({
         companyId: cleaned,
@@ -292,6 +298,8 @@ export function createLiveTedDiscovery(options: {
         needsReview,
         sourceResults: result.sourceResults,
         candidates,
+        actionableCandidates: actionable,
+        excludedCandidates: excluded,
       })
     },
 

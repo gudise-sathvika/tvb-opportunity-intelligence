@@ -238,6 +238,22 @@ export function createReviewQueue(
   return deepFreeze(items)
 }
 
+/**
+ * Phase 22 (from Phase 21E): narrows a review-item list to exactly ONE run.
+ *
+ * The Human review store is cumulative (seeded fixtures + every run), so the
+ * run handoff link carries the run id to scope what the reviewer sees. A run's
+ * items carry either the run id or a per-company child id (`<runId>-<company>`)
+ * on `discoveryRunId` and `provenance.runId`; fixtures (and any other run) are
+ * excluded. This is a pure filter — it never mutates or deletes anything.
+ */
+export function filterReviewItemsByRun(items: readonly ReviewItem[], runId: string): readonly ReviewItem[] {
+  const trimmed = runId.trim()
+  if (trimmed === '') return items
+  const matches = (value: string): boolean => value === trimmed || value.startsWith(`${trimmed}-`)
+  return items.filter((item) => matches(item.discoveryRunId) || matches(item.provenance.runId))
+}
+
 /* ------------------------------------------------------------------ */
 /* Review decision contract                                             */
 /* ------------------------------------------------------------------ */

@@ -2,7 +2,11 @@ import { Link, useSearchParams } from 'react-router-dom'
 import SegmentedTabs from '../navigation/SegmentedTabs'
 import type { ProcurementMatchReviewItem, ProcurementMatchReviewStatus } from '../../automation/procurement-match-review'
 import { PMATCH_REVIEW_STATUSES } from '../../automation/procurement-match-review'
-import { procurementMatchReviewFixtureStore } from '../../automation/procurement-match-fixture'
+import {
+  MATCH_REVIEW_DEMO_PARAM,
+  MATCH_REVIEW_DEMO_VALUE,
+} from '../../automation/match-review-source'
+import { resolveProcurementMatchSource } from '../../automation/procurement-match-source'
 import { MatchReviewStatusBadge } from '../match-review/MatchReviewStatusBadge'
 import {
   PMATCH_PROPOSAL_STATUS_LABEL,
@@ -25,13 +29,22 @@ import {
 export default function ProcurementMatchReviewQueue() {
   const [params] = useSearchParams()
   const filter = resolveProcurementReviewFilter(params.get('status'))
+  const source = resolveProcurementMatchSource(params.get(MATCH_REVIEW_DEMO_PARAM))
 
-  const items: readonly ProcurementMatchReviewItem[] = procurementMatchReviewFixtureStore.items()
+  const items: readonly ProcurementMatchReviewItem[] = source.items
   const visible = filter === 'all' ? items : items.filter((entry) => entry.reviewStatus === filter)
 
   const counts = {} as Record<ProcurementMatchReviewStatus, number>
   for (const status of PMATCH_REVIEW_STATUSES) counts[status] = 0
   for (const entry of items) counts[entry.reviewStatus] += 1
+
+  const queuePath = (segment: { slug: string }): string => {
+    const query = new URLSearchParams()
+    if (segment.slug !== 'all') query.set('status', segment.slug)
+    if (source.demo) query.set(MATCH_REVIEW_DEMO_PARAM, MATCH_REVIEW_DEMO_VALUE)
+    const qs = query.toString()
+    return qs ? `/procurement-match-review?${qs}` : '/procurement-match-review'
+  }
 
   return (
     <section className="page">
@@ -42,6 +55,14 @@ export default function ProcurementMatchReviewQueue() {
           eligible for a future Procurement Match record — nothing is created or written here.
         </p>
       </header>
+
+      {source.demo ? (
+        <div className="mr-demo" role="note" data-testid="procurement-match-review-demo-banner">
+          <strong className="mr-demo__label">Demo data.</strong> These fixture proposals use
+          demonstration companies and notices. They are not real matches and appear only in demo
+          mode.
+        </div>
+      ) : null}
 
       <div className="statgrid review-stats" role="group" aria-label="Procurement match review summary">
         {PMATCH_REVIEW_FILTERS.filter((f) => f.status !== null).map((f) => (
@@ -59,12 +80,21 @@ export default function ProcurementMatchReviewQueue() {
           segments={PMATCH_REVIEW_FILTERS.map((f) => ({
             key: f.slug,
             label: f.label,
-            to: f.slug === 'all' ? '/procurement-match-review' : `/procurement-match-review?status=${f.slug}`,
+            to: queuePath(f),
           }))}
         />
       </div>
 
-      {visible.length === 0 ? (
+      {visible.length === 0 && !source.demo ? (
+        <div className="empty" data-testid="procurement-match-review-empty">
+          <p className="empty__headline">No real procurement match proposals yet</p>
+          <p className="empty__body">
+            A real proposal needs a genuine company record and a genuine notice with available
+            provenance, plus matching evidence to evaluate. The imported snapshot holds no company
+            records, so no real proposals can be generated. Fixtures are never substituted here.
+          </p>
+        </div>
+      ) : visible.length === 0 ? (
         <div className="empty">
           <p className="empty__headline">Nothing here needs this filter</p>
           <p className="empty__body">
@@ -88,7 +118,11 @@ export default function ProcurementMatchReviewQueue() {
             </thead>
             <tbody>
               {visible.map((entry) => (
-                <ProcurementMatchReviewRow key={entry.proposal.proposalId} entry={entry} />
+                <ProcurementMatchReviewRow
+                  key={entry.proposal.proposalId}
+                  entry={entry}
+                  demo={source.demo}
+                />
               ))}
             </tbody>
           </table>
@@ -98,17 +132,23 @@ export default function ProcurementMatchReviewQueue() {
   )
 }
 
-function ProcurementMatchReviewRow({ entry }: { entry: ProcurementMatchReviewItem }) {
+function ProcurementMatchReviewRow({
+  entry,
+  demo,
+}: {
+  entry: ProcurementMatchReviewItem
+  demo: boolean
+}) {
   const matched = entry.proposal.matchedSignals.map((signal) => PMATCH_SIGNAL_LABEL[signal])
   const missing = entry.proposal.missingSignals.map((signal) => PMATCH_SIGNAL_LABEL[signal])
+  const detailPath = `/procurement-match-review/${encodeURIComponent(entry.proposal.proposalId)}${
+    demo ? `?${MATCH_REVIEW_DEMO_PARAM}=${MATCH_REVIEW_DEMO_VALUE}` : ''
+  }`
   return (
     <tr>
       <td data-label="Company">
         <span className="recordlink">
-          <Link
-            to={`/procurement-match-review/${encodeURIComponent(entry.proposal.proposalId)}`}
-            className="recordlink__name"
-          >
+          <Link to={detailPath} className="recordlink__name">
             {entry.companyName ?? entry.proposal.companyId}
           </Link>
         </span>

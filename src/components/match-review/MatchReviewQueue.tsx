@@ -2,7 +2,11 @@ import { Link, useSearchParams } from 'react-router-dom'
 import SegmentedTabs from '../navigation/SegmentedTabs'
 import type { MatchReviewItem, MatchReviewStatus } from '../../automation/match-review'
 import { MATCH_REVIEW_STATUSES } from '../../automation/match-review'
-import { matchReviewFixtureStore } from '../../automation/match-review-fixture'
+import {
+  MATCH_REVIEW_DEMO_PARAM,
+  MATCH_REVIEW_DEMO_VALUE,
+  resolveMatchReviewSource,
+} from '../../automation/match-review-source'
 import { MatchReviewStatusBadge } from './MatchReviewStatusBadge'
 import {
   MATCH_REVIEW_FILTERS,
@@ -24,13 +28,22 @@ import {
 export default function MatchReviewQueue() {
   const [params] = useSearchParams()
   const filter = resolveMatchReviewFilter(params.get('status'))
+  const source = resolveMatchReviewSource(params.get(MATCH_REVIEW_DEMO_PARAM))
 
-  const items: readonly MatchReviewItem[] = matchReviewFixtureStore.items()
+  const items: readonly MatchReviewItem[] = source.items
   const visible = filter === 'all' ? items : items.filter((entry) => entry.reviewStatus === filter)
 
   const counts = {} as Record<MatchReviewStatus, number>
   for (const status of MATCH_REVIEW_STATUSES) counts[status] = 0
   for (const entry of items) counts[entry.reviewStatus] += 1
+
+  const queuePath = (segment: { slug: string }): string => {
+    const query = new URLSearchParams()
+    if (segment.slug !== 'all') query.set('status', segment.slug)
+    if (source.demo) query.set(MATCH_REVIEW_DEMO_PARAM, MATCH_REVIEW_DEMO_VALUE)
+    const qs = query.toString()
+    return qs ? `/match-review?${qs}` : '/match-review'
+  }
 
   return (
     <section className="page">
@@ -41,6 +54,14 @@ export default function MatchReviewQueue() {
           eligible for a future Match record — nothing is created or written here.
         </p>
       </header>
+
+      {source.demo ? (
+        <div className="mr-demo" role="note" data-testid="match-review-demo-banner">
+          <strong className="mr-demo__label">Demo data.</strong> These fixture proposals use
+          demonstration companies and opportunities. They are not real matches and appear only in
+          demo mode.
+        </div>
+      ) : null}
 
       <div className="statgrid review-stats" role="group" aria-label="Match review summary">
         {MATCH_REVIEW_FILTERS.filter((f) => f.status !== null).map((f) => (
@@ -58,12 +79,22 @@ export default function MatchReviewQueue() {
           segments={MATCH_REVIEW_FILTERS.map((f) => ({
             key: f.slug,
             label: f.label,
-            to: f.slug === 'all' ? '/match-review' : `/match-review?status=${f.slug}`,
+            to: queuePath(f),
           }))}
         />
       </div>
 
-      {visible.length === 0 ? (
+      {visible.length === 0 && !source.demo ? (
+        <div className="empty" data-testid="match-review-empty">
+          <p className="empty__headline">No real match proposals yet</p>
+          <p className="empty__body">
+            A real proposal needs a genuine company record and a genuine opportunity record with
+            available provenance, plus matching evidence to evaluate. The imported snapshot holds
+            no company records, so no real proposals can be generated. Fixtures are never
+            substituted here.
+          </p>
+        </div>
+      ) : visible.length === 0 ? (
         <div className="empty">
           <p className="empty__headline">Nothing here needs this filter</p>
           <p className="empty__body">
@@ -87,7 +118,7 @@ export default function MatchReviewQueue() {
             </thead>
             <tbody>
               {visible.map((entry) => (
-                <MatchReviewRow key={entry.proposal.proposalId} entry={entry} />
+                <MatchReviewRow key={entry.proposal.proposalId} entry={entry} demo={source.demo} />
               ))}
             </tbody>
           </table>
@@ -97,17 +128,17 @@ export default function MatchReviewQueue() {
   )
 }
 
-function MatchReviewRow({ entry }: { entry: MatchReviewItem }) {
+function MatchReviewRow({ entry, demo }: { entry: MatchReviewItem; demo: boolean }) {
   const matched = entry.proposal.matchedSignals.map((signal) => MATCH_SIGNAL_LABEL[signal])
   const missing = entry.proposal.missingSignals.map((signal) => MATCH_SIGNAL_LABEL[signal])
+  const detailPath = `/match-review/${encodeURIComponent(entry.proposal.proposalId)}${
+    demo ? `?${MATCH_REVIEW_DEMO_PARAM}=${MATCH_REVIEW_DEMO_VALUE}` : ''
+  }`
   return (
     <tr>
       <td data-label="Company">
         <span className="recordlink">
-          <Link
-            to={`/match-review/${encodeURIComponent(entry.proposal.proposalId)}`}
-            className="recordlink__name"
-          >
+          <Link to={detailPath} className="recordlink__name">
             {entry.companyName ?? entry.proposal.companyId}
           </Link>
         </span>
