@@ -126,9 +126,36 @@ export function normalizeEuSediaStatus(value: unknown): EuSediaNormalizedStatus 
   }
 }
 
-/** Official detail-page prefix for topic/call records built from `reference`. */
+/** Official human detail-page prefix for topic/call records (topic identifier appended). */
 export const EU_SEDIA_TOPIC_DETAILS_PREFIX =
   'https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/'
+
+/**
+ * Phase 21D: some SEDIA records — notably the `SEDIA_PRD_CENTRICITY` centroid
+ * duplicates — carry a machine **data** endpoint as their `url`
+ * (`.../opportunities/data/topicDetails/<TOPIC-ID>.json`). Clicking it renders
+ * raw JSON, not the portal page. The `.json` basename IS the official topic
+ * identifier, so it is rewritten to the canonical human topic-details page.
+ */
+const EU_SEDIA_DATA_TOPIC_DETAILS_PATTERN =
+  /^https?:\/\/ec\.europa\.eu\/info\/funding-tenders\/opportunities\/data\/topicDetails\/([A-Za-z0-9._-]+)\.json$/i
+
+/**
+ * Maps a source `url` to its official human destination:
+ *  - a `.../data/topicDetails/<TOPIC-ID>.json` data endpoint → the canonical
+ *    `.../topic-details/<TOPIC-ID>` page;
+ *  - any other absolute `http(s)` URL (PROSPECTS call page, `tender-details`,
+ *    already-canonical `topic-details`) → kept verbatim;
+ *  - missing / non-absolute → `''` (destination unavailable), never fabricated.
+ */
+export function normalizeEuSediaOfficialUrl(raw: string | null | undefined): string {
+  const value = (raw ?? '').trim()
+  if (value === '') return ''
+  const data = EU_SEDIA_DATA_TOPIC_DETAILS_PATTERN.exec(value)
+  if (data !== null) return `${EU_SEDIA_TOPIC_DETAILS_PREFIX}${encodeURIComponent(data[1]!)}`
+  if (!/^https?:\/\//i.test(value)) return ''
+  return value
+}
 
 /* ------------------------------------------------------------------ */
 /* Query plan                                                          */
@@ -390,7 +417,7 @@ export function parseEuSediaBody(body: string, context: EuSediaParseContext): Eu
 
     const title = firstString(metadata['title']) ?? firstString(metadata['callIdentifier']) ?? reference
     const callIdentifier = firstString(metadata['callIdentifier'])
-    const url = firstString(entry['url']) ?? ''
+    const url = normalizeEuSediaOfficialUrl(firstString(entry['url']))
     const deadline = normalizeEuSediaDate(metadata['deadlineDate'])
     const publicationDate = normalizeEuSediaDate(metadata['es_SortDate'])
 

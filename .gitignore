@@ -49,13 +49,10 @@ src/data/generated/
 # SHA-256 source-integrity manifests written by the importer.
 .import-manifests/
 
-# Phase 5 browser-QA artefacts. Screenshots and Playwright run output are
-# regenerable from the suite, and the test-results copies can include a page
-# snapshot of vault records.
-qa/.artifacts/
-qa/screenshots/
-qa/*.png
-qa/.report-failures.txt
+# Phase 5 browser-QA suite and phase reports. Kept LOCAL-ONLY and intentionally
+# not published to the repository: this covers the Playwright specs, helpers,
+# regenerable artefacts/screenshots, and the phase reports.
+qa/
 qa-run-*.log
 .phase5-baseline.txt
 powershell.exe

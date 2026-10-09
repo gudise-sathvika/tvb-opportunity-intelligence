@@ -17,6 +17,7 @@ import {
   buildEuSediaSearchUrl,
   classifyEuSediaRecord,
   normalizeEuSediaDate,
+  normalizeEuSediaOfficialUrl,
   normalizeEuSediaStatus,
   parseEuSediaBody,
   EU_SEDIA_TYPE_CODES,
@@ -114,6 +115,83 @@ test('parses records, excludes FAQ, keeps unknown codes as UNKNOWN, and dedups b
   const unknown = parsed.results[2]!
   assert.equal(unknown.rawType, null)
   assert.equal(unknown.sourceStatus, 'open')
+})
+
+test('Phase 21D: a data-endpoint URL becomes the human topic page; other destinations are preserved', () => {
+  const parsed = parseEuSediaBody(
+    sediaBody([
+      record(
+        'REF-DATA',
+        metadata({ DATASOURCE: ['SEDIA_PRD_CENTRICITY'] }),
+        'https://ec.europa.eu/info/funding-tenders/opportunities/data/topicDetails/HORIZON-CL2-2024-TRANSFORMATIONS-01-06.json',
+      ),
+      record(
+        'REF-PAGE',
+        metadata({}),
+        'https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/HORIZON-CL3-2027-02-CS-ECCC-01',
+      ),
+      record(
+        'REF-PROSPECTS',
+        metadata({ type: ['2'] }),
+        'https://webgate.ec.europa.eu/prospect/external/publishedcalls.htm?callId=181971',
+      ),
+    ]),
+    { sourceId: EU_SEDIA_SOURCE_ID, observedAt: OBSERVED_AT, queryTerm: 'ai' },
+  )
+
+  assert.equal(parsed.errors.length, 0)
+  // The centroid data endpoint is rewritten to the canonical human topic page,
+  // using the official topic identifier fetched from the `.json` basename.
+  assert.equal(
+    parsed.results[0]!.sourceUrl,
+    'https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/HORIZON-CL2-2024-TRANSFORMATIONS-01-06',
+  )
+  // An already-canonical topic page is untouched.
+  assert.equal(
+    parsed.results[1]!.sourceUrl,
+    'https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/HORIZON-CL3-2027-02-CS-ECCC-01',
+  )
+  // An external-action PROSPECTS record keeps its own official destination.
+  assert.equal(
+    parsed.results[2]!.sourceUrl,
+    'https://webgate.ec.europa.eu/prospect/external/publishedcalls.htm?callId=181971',
+  )
+})
+
+test('Phase 21D: missing or non-absolute URLs never become fabricated detail links', () => {
+  const parsed = parseEuSediaBody(
+    sediaBody([
+      record('REF-NOURL', metadata({}), ''),
+      record('REF-RELATIVE', metadata({}), '/relative/path'),
+    ]),
+    { sourceId: EU_SEDIA_SOURCE_ID, observedAt: OBSERVED_AT, queryTerm: 'ai' },
+  )
+  assert.equal(parsed.results.length, 2)
+  assert.equal(parsed.results[0]!.sourceUrl, '')
+  assert.equal(parsed.results[1]!.sourceUrl, '')
+  // The stable internal reference must never leak into a constructed link.
+  assert.equal(parsed.results.some((r) => r.sourceUrl.includes('REF-')), false)
+})
+
+test('Phase 21D: normalizeEuSediaOfficialUrl keeps distinct destinations and encodes the id', () => {
+  assert.equal(
+    normalizeEuSediaOfficialUrl(
+      'https://ec.europa.eu/info/funding-tenders/opportunities/data/topicDetails/ICT-26-2018-2020.json',
+    ),
+    'https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/ICT-26-2018-2020',
+  )
+  // Tender detail pages are a different destination and must stay verbatim.
+  assert.equal(
+    normalizeEuSediaOfficialUrl(
+      'https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/tender-details/12345',
+    ),
+    'https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/tender-details/12345',
+  )
+  // Non-absolute / missing inputs are unavailable, not invented.
+  assert.equal(normalizeEuSediaOfficialUrl('webgate.ec.europa.eu/x'), '')
+  assert.equal(normalizeEuSediaOfficialUrl('   '), '')
+  assert.equal(normalizeEuSediaOfficialUrl(null), '')
+  assert.equal(normalizeEuSediaOfficialUrl(undefined), '')
 })
 
 test('query plan defaults to grant topic/external-action/cascade types, open+forthcoming, FAQ excluded', () => {
