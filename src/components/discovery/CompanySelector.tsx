@@ -5,6 +5,7 @@ const PAGE_SIZE = 5
 interface CompanySelectorProps {
   companies: readonly string[]
   selected: ReadonlySet<string>
+  demo: boolean
   onToggle(companyName: string): void
   onSelectAllVisible(companyNames: readonly string[]): void
   onClear(): void
@@ -20,6 +21,7 @@ interface CompanySelectorProps {
 export default function CompanySelector({
   companies,
   selected,
+  demo,
   onToggle,
   onSelectAllVisible,
   onClear,
@@ -45,7 +47,7 @@ export default function CompanySelector({
 
   return (
     <section className="card dg-panel" aria-label="Company selection">
-      <h2 className="dg-panel__title">Companies</h2>
+      <h2 className="dg-panel__title">{demo ? 'Demo companies' : 'Company directory'}</h2>
 
       <label className="dg-company-search">
         <span className="visually-hidden">Search companies</span>
@@ -60,6 +62,12 @@ export default function CompanySelector({
           }}
         />
       </label>
+      {!demo ? (
+        <p className="dg-instruction" role="note">
+          Verified company profiles have not yet been added. The names below are a directory used as search
+          keys, not verified company records.
+        </p>
+      ) : null}
 
       <div className="dg-tools">
         <button type="button" className="btn" onClick={() => onSelectAllVisible(visibleCompanies)}>
@@ -75,7 +83,11 @@ export default function CompanySelector({
       </p>
 
       {filteredCompanies.length === 0 ? (
-        <p className="dg-empty">No company records are available to run discovery for.</p>
+        <p className="dg-empty">
+          {demo
+            ? 'No company records are available to run discovery for.'
+            : 'No company records are available to run discovery for. (Verified company profiles have not yet been added.)'}
+        </p>
       ) : (
         <>
           <ul className="dg-companies">
@@ -95,7 +107,7 @@ export default function CompanySelector({
               </li>
             ))}
           </ul>
-          <nav className="dg-company-pagination" aria-label="Company list pages">
+          <nav className="dg-company-pagination" aria-label={demo ? 'Demo company list pages' : 'Company directory pages'}>
             <span className="dg-company-pagination__range" aria-live="polite">
               {firstVisible}–{lastVisible} of {filteredCompanies.length}
             </span>

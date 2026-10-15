@@ -166,31 +166,33 @@ test('default registry contains GlobalTenders plus both fixture sources, TED, US
   assert.ok(DEFAULT_SOURCE_REGISTRY.has(USA_SPENDING_SOURCE_ID))
   assert.ok(DEFAULT_SOURCE_REGISTRY.has(GRANTS_GOV_SOURCE_ID))
   assert.ok(DEFAULT_SOURCE_REGISTRY.has(EU_SEDIA_SOURCE_ID))
-  assert.equal(DEFAULT_SOURCE_REGISTRY.size, 7)
+  assert.equal(DEFAULT_SOURCE_REGISTRY.size, 8)
 })
 
-test('Grants.gov is registered as a funding-opportunity source before verification (Phase 19B)', () => {
+test('Grants.gov is registered as a verified funding-opportunity source (Phase 19B / 02)', () => {
   const entry = DEFAULT_SOURCE_REGISTRY.get(GRANTS_GOV_SOURCE_ID)
   assert.ok(entry, 'Grants.gov must be present in the registry')
   assert.equal(entry.domain, 'api.grants.gov')
   assert.equal(entry.applicability, 'funding')
   assert.equal(entry.discoveryCapability, 'listing_search')
   assert.equal(entry.adapterType, GRANTS_GOV_ADAPTER_TYPE)
-  assert.equal(entry.accessState, 'UNKNOWN', 'no verified read-only search has run yet, so access is not assumed AVAILABLE')
+  assert.equal(entry.accessState, 'AVAILABLE', 'AVAILABLE reflects the verified read-only search, not adapter existence')
   assert.equal(entry.domain.includes('://'), false, 'the registry records a host, never a dereferenceable URL')
   assert.ok(entry.notesRestrictions.join(' ').includes('OPPORTUNITIES'), 'it describes grant opportunities, not historical awards')
   assert.ok(entry.notesRestrictions.join(' ').includes('no API key'), 'no credentials are used')
+  assert.ok(entry.notesRestrictions.join(' ').includes('2026-10-14'), 'the verification date is recorded as a fact')
 })
 
-test('the EU Funding & Tenders source is registered before verification (Phase 21C)', () => {
+test('the EU Funding & Tenders source is registered as verified (Phase 21C / 02)', () => {
   const entry = DEFAULT_SOURCE_REGISTRY.get(EU_SEDIA_SOURCE_ID)
   assert.ok(entry, 'the EU source must be present in the registry')
   assert.equal(entry.domain, 'api.tech.ec.europa.eu')
   assert.equal(entry.applicability, 'funding')
   assert.equal(entry.discoveryCapability, 'listing_search')
   assert.equal(entry.adapterType, EU_SEDIA_ADAPTER_TYPE)
-  assert.equal(entry.accessState, 'UNKNOWN', 'no verified read-only search has run yet, so access is not assumed AVAILABLE')
+  assert.equal(entry.accessState, 'AVAILABLE', 'AVAILABLE reflects the verified read-only search, not adapter existence')
   assert.equal(entry.domain.includes('://'), false, 'the registry records a host, never a dereferenceable URL')
+  assert.ok(entry.notesRestrictions.join(' ').includes('2026-10-14'), 'the verification date is recorded as a fact')
 })
 
 test('USAspending is registered only with verified access facts (Phase V)', () => {

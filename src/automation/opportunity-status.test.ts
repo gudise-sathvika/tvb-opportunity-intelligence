@@ -21,6 +21,7 @@ import { test } from 'node:test'
 import {
   EU_SEDIA_SOURCE_ID,
   FIXTURE_FUNDING_SOURCE_ID,
+  FTS_SOURCE_ID,
   GRANTS_GOV_SOURCE_ID,
   TED_SOURCE_ID,
   USA_SPENDING_SOURCE_ID,
@@ -45,6 +46,7 @@ const PAST = '2026-01-01'
 const OFFICIAL_GRANTS = 'https://www.grants.gov/search-results-detail/350001'
 const OFFICIAL_EU = 'https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/HORIZON-OPEN'
 const OFFICIAL_TED = 'https://ted.europa.eu/en/notice/-/detail/123456-2026'
+const OFFICIAL_FTS = 'https://www.find-tender.service.gov.uk/Notice/097235-2026'
 
 /** Build a real candidate through the Phase C transform, then override flat fields. */
 function candidate(overrides: Partial<DiscoveryCandidate>): DiscoveryCandidate {
@@ -172,6 +174,39 @@ test('TED: only contract notices (cn-*) become opportunities; awards and PIN not
   assert.equal(tedNoticeKind('  '), null)
 })
 
+test('Find a Tender: only active tenders with a future deadline are open; the rest are not', () => {
+  const cases: ReadonlyArray<[string, Partial<DiscoveryCandidate>, string]> = [
+    [
+      'active tender with a future deadline',
+      { sourceStatus: 'active', sourceDeadline: FUTURE, sourceUrl: OFFICIAL_FTS },
+      'open',
+    ],
+    [
+      'active tender whose deadline has passed',
+      { sourceStatus: 'active', sourceDeadline: PAST, sourceUrl: OFFICIAL_FTS },
+      'expired',
+    ],
+    [
+      'active tender with no deadline',
+      { sourceStatus: 'active', sourceDeadline: null, sourceUrl: OFFICIAL_FTS },
+      'unknown',
+    ],
+    [
+      'active tender with a non-official URL',
+      { sourceStatus: 'active', sourceDeadline: FUTURE, sourceUrl: 'https://example.org/notice/x' },
+      'unknown',
+    ],
+    ['planned tender', { sourceStatus: 'planned', sourceDeadline: FUTURE, sourceUrl: OFFICIAL_FTS }, 'forthcoming'],
+    ['cancelled tender', { sourceStatus: 'cancelled', sourceDeadline: FUTURE, sourceUrl: OFFICIAL_FTS }, 'closed'],
+    ['completed tender record', { sourceStatus: 'complete', sourceDeadline: FUTURE, sourceUrl: OFFICIAL_FTS }, 'historical'],
+    ['missing status', { sourceStatus: null, sourceDeadline: FUTURE, sourceUrl: OFFICIAL_FTS }, 'unknown'],
+  ]
+  for (const [label, overrides, expected] of cases) {
+    const verdict = classifyOpportunityState(candidate({ sourceId: FTS_SOURCE_ID, ...overrides }), NOW)
+    assert.equal(verdict.state, expected, `FTS ${label}`)
+  }
+})
+
 test('the ingest gate admits only classifier-open records and preserves the rest', () => {
   const openTed = candidate({
     candidateId: 'C-OPEN',
@@ -233,4 +268,71 @@ test('USAspending is always historical and an unknown source is never open', () 
   )
   assert.equal(unknownSource.state, 'unknown')
   assert.equal(isOpenState(unknownSource.state), false)
+})
+
+test('FTS: withdrawn and unrecognized statuses are unknown, never actionable', () => {
+  for (const status of ['withdrawn', 'unsuccessful', 'planning', 'archived']) {
+    const verdict = classifyOpportunityState(
+      candidate({ sourceId: FTS_SOURCE_ID, sourceStatus: status, sourceDeadline: FUTURE, sourceUrl: OFFICIAL_FTS }),
+      NOW,
+    )
+    assert.equal(verdict.state, 'unknown', `FTS status ${status}`)
+  }
+  assert.equal(isActionableOpen(candidate({ sourceId: FTS_SOURCE_ID, sourceStatus: 'withdrawn', sourceDeadline: FUTURE, sourceUrl: OFFICIAL_FTS }), NOW), false)
+})
+
+test('Phase 07A: EU forthcoming with a past deadline is expired, not forthcoming forever', () => {
+  const eu = (overrides: Partial<DiscoveryCandidate>) =>
+    classifyOpportunityState(candidate({ sourceId: EU_SEDIA_SOURCE_ID, ...overrides }), NOW)
+  assert.equal(
+    eu({ sourceStatus: 'forthcoming', sourceDeadline: PAST, sourceUrl: OFFICIAL_EU }).state,
+    'expired',
+  )
+  assert.equal(
+    eu({ sourceStatus: 'forthcoming', sourceDeadline: FUTURE, sourceUrl: OFFICIAL_EU }).state,
+    'forthcoming',
+  )
+  assert.equal(
+    eu({ sourceStatus: 'forthcoming', sourceDeadline: null, sourceUrl: OFFICIAL_EU }).state,
+    'forthcoming',
+  )
+})
+
+test('Phase 15A: approval never extends actionability — revalidation at a later time governs', () => {
+  // The same candidate approved while open is expired when re-checked after
+  // its deadline. Human approval is a reviewer decision, not proof the call
+  // stays open; the shared classifier (reused, never duplicated) decides.
+  const approvedWhileOpen = candidate({
+    sourceId: GRANTS_GOV_SOURCE_ID,
+    sourceStatus: 'posted',
+    sourceDeadline: '2026-11-17',
+    sourceUrl: OFFICIAL_GRANTS,
+  })
+  assert.equal(classifyOpportunityState(approvedWhileOpen, '2026-10-15T00:00:00.000Z').state, 'open')
+  assert.equal(classifyOpportunityState(approvedWhileOpen, '2026-11-18T00:00:00.000Z').state, 'expired')
+  assert.equal(isActionableOpen(approvedWhileOpen, '2026-11-18T00:00:00.000Z'), false)
+})
+
+test('Phase 15A: missing deadlines and closed records stay non-actionable on revalidation', () => {
+  const missing = candidate({
+    sourceId: GRANTS_GOV_SOURCE_ID,
+    sourceStatus: 'posted',
+    sourceDeadline: null,
+    sourceUrl: OFFICIAL_GRANTS,
+  })
+  assert.equal(classifyOpportunityState(missing, '2026-10-15T00:00:00.000Z').state, 'unknown')
+  const closed = candidate({
+    sourceId: GRANTS_GOV_SOURCE_ID,
+    sourceStatus: 'closed',
+    sourceDeadline: '2028-01-01',
+    sourceUrl: OFFICIAL_GRANTS,
+  })
+  assert.equal(classifyOpportunityState(closed, '2026-10-15T00:00:00.000Z').state, 'closed')
+  const valid = candidate({
+    sourceId: GRANTS_GOV_SOURCE_ID,
+    sourceStatus: 'posted',
+    sourceDeadline: '2028-01-01',
+    sourceUrl: OFFICIAL_GRANTS,
+  })
+  assert.equal(classifyOpportunityState(valid, '2026-10-15T00:00:00.000Z').state, 'open')
 })

@@ -1,13 +1,109 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useReducer, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { installReviewPersistence } from '../../live-source/review-persistence'
 import { COMPANY_DIRECTORY_NAMES } from '../../data/company-directory-names'
+import { associationsForCompany } from '../../live-source/company-associations'
+import { reviewFixtureStore } from '../../automation/review-fixture'
+import { deadlineOf } from '../review/labels'
 
 const PAGE_SIZE = 5
 const UNAVAILABLE = <span className="value value--blank">Unavailable</span>
+
+/**
+ * Phase 32: approved-activity columns are derived from recorded
+ * company-opportunity associations (distinct canonical opportunities per
+ * company per domain), never from discovery occurrences. Details come live
+ * from the referenced review items, so the list cannot drift from evidence.
+ */
+function distinctApproved(name: string, domain: 'funding' | 'procurement'): { recordId: string; reviewId: string }[] {
+  const seen = new Set<string>()
+  const out: { recordId: string; reviewId: string }[] = []
+  for (const association of associationsForCompany(name)) {
+    if (association.domain !== domain) continue
+    const key = association.sourceRecordId ?? association.candidateId
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push({ recordId: key, reviewId: association.reviewId })
+  }
+  return out
+}
+
+/**
+ * Phase 32 approved-opportunity list for one company. Every field is read live
+ * from the referenced review item; an association whose review record is
+ * unavailable renders honestly instead of guessing.
+ */
+function CompanyApprovals({ name }: { name: string }) {
+  const funding = distinctApproved(name, 'funding')
+  const procurement = distinctApproved(name, 'procurement')
+  if (funding.length === 0 && procurement.length === 0) {
+    return <p className="dg-empty">No approved opportunities yet for {name}.</p>
+  }
+  const renderGroup = (title: string, entries: { recordId: string; reviewId: string }[]) => {
+    if (entries.length === 0) return null
+    return (
+      <div>
+        <h3 className="dg-subtitle">
+          {title} ({entries.length})
+        </h3>
+        <ul className="dg-candidates">
+          {entries.map((entry) => {
+            const item = reviewFixtureStore.item(entry.reviewId)
+            if (item === undefined) {
+              return (
+                <li key={entry.reviewId} className="dg-candidate">
+                  <span className="dg-candidate__title">{entry.recordId}</span>
+                  <span className="dg-candidate__meta">Review record unavailable — association preserved.</span>
+                </li>
+              )
+            }
+            return (
+              <li key={entry.reviewId} className="dg-candidate">
+                <span className="dg-candidate__title">{item.sourceTitle || '(untitled)'}</span>
+                <span className="dg-candidate__meta">
+                  {item.sourceRecordId ?? item.candidateId} · deadline {deadlineOf(item) ?? '—'}
+                  {' · approved '}
+                  {item.audit.length > 0 ? item.audit[item.audit.length - 1]?.decidedAt.slice(0, 10) ?? '—' : '—'}
+                </span>
+                <a className="dg-candidate__link" href={item.sourceUrl} target="_blank" rel="noreferrer">
+                  Official source record
+                </a>{' '}
+                <Link to={`/review/${encodeURIComponent(item.reviewId)}`}>Open review item</Link>{' '}
+                <Link to={`/prepare/${encodeURIComponent(item.reviewId)}`}>Prepare application</Link>
+                <span className="dg-candidate__meta">TVB does not submit applications automatically.</span>
+              </li>
+            )
+          })}
+        </ul>
+      </div>
+    )
+  }
+  return (
+    <div>
+      {renderGroup('Approved funding opportunities', funding)}
+      {renderGroup('Approved procurement notices', procurement)}
+    </div>
+  )
+}
 
 export default function CompaniesTable({ headingAs = 'h1' }: { headingAs?: 'h1' | 'h2' }) {
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<'asc' | 'desc'>('asc')
   const [page, setPage] = useState(0)
+  const [expanded, setExpanded] = useState<string | null>(null)
+  // Phase 33: restore persisted review items/decisions so approved lists survive reloads.
+  const [, forceRender] = useReducer((version: number) => version + 1, 0)
+  useEffect(() => {
+    const uninstallPersistence = installReviewPersistence()
+    const unsubscribeTick = reviewFixtureStore.subscribe(() => {
+      forceRender()
+    })
+    forceRender()
+    return () => {
+      uninstallPersistence()
+      unsubscribeTick()
+    }
+  }, [])
 
   const names = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase()
@@ -109,16 +205,56 @@ export default function CompaniesTable({ headingAs = 'h1' }: { headingAs?: 'h1' 
                 </tr>
               </thead>
               <tbody>
-                {visibleNames.map((name) => (
-                  <tr key={name}>
-                    <td data-label="Company">{name}</td>
-                    <td data-label="Country">{UNAVAILABLE}</td>
-                    <td data-label="Company stage">{UNAVAILABLE}</td>
-                    <td data-label="Funding activity">{UNAVAILABLE}</td>
-                    <td data-label="Procurement activity">{UNAVAILABLE}</td>
-                    <td data-label="Profile status">{UNAVAILABLE}</td>
-                  </tr>
-                ))}
+                {visibleNames.map((name) => {
+                  const funding = distinctApproved(name, 'funding')
+                  const procurement = distinctApproved(name, 'procurement')
+                  const open = expanded === name
+                  return (
+                    <Fragment key={name}>
+                      <tr>
+                        <td data-label="Company">
+                          <button
+                            type="button"
+                            className="recordlink__name"
+                            aria-expanded={open}
+                            aria-label={`${open ? 'Hide' : 'Show'} approved opportunities for ${name}`}
+                            onClick={() => setExpanded(open ? null : name)}
+                          >
+                            {name}
+                          </button>
+                        </td>
+                        <td data-label="Country">{UNAVAILABLE}</td>
+                        <td data-label="Company stage">{UNAVAILABLE}</td>
+                        <td data-label="Funding activity">
+                          {funding.length === 0 ? (
+                            <span className="value value--blank">0 approved</span>
+                          ) : (
+                            <span>
+                              {funding.length} approved ({funding.length === 1 ? 'opportunity' : 'opportunities'})
+                            </span>
+                          )}
+                        </td>
+                        <td data-label="Procurement activity">
+                          {procurement.length === 0 ? (
+                            <span className="value value--blank">0 approved</span>
+                          ) : (
+                            <span>
+                              {procurement.length} approved ({procurement.length === 1 ? 'notice' : 'notices'})
+                            </span>
+                          )}
+                        </td>
+                        <td data-label="Profile status">{UNAVAILABLE}</td>
+                      </tr>
+                      {open ? (
+                        <tr>
+                          <td colSpan={6}>
+                            <CompanyApprovals name={name} />
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
+                  )
+                })}
               </tbody>
             </table>
           </div>

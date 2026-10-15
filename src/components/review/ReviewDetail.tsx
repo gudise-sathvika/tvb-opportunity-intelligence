@@ -1,13 +1,23 @@
-import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import BackNavigation from '../navigation/BackNavigation'
 import { reviewFixtureStore } from '../../automation/review-fixture'
+import { installReviewPersistence } from '../../live-source/review-persistence'
+import { associateCompany } from '../../live-source/company-associations'
+import { COMPANY_DIRECTORY_NAMES } from '../../data/company-directory-names'
+import {
+  REVIEW_DEMO_PARAM,
+  REVIEW_DEMO_VALUE,
+  isDemoReviewRequest,
+  resolveReviewItem,
+} from '../../automation/review-source'
 import type { ReviewItem, ReviewDecisionKind } from '../../automation/review-queue'
 import { TERMINAL_REVIEW_STATUSES } from '../../automation/review-queue'
 import { ReviewStatusBadge } from './ReviewStatusBadge'
 import VaultWritePanel from './VaultWritePanel'
 import { rfpDisplay } from '../vocabulary'
-import { DOMAIN_LABEL, REVIEW_STATUS_LABEL, companyNameFor, deadlineOf, publicationDateOf } from './labels'
+import { DOMAIN_LABEL, REVIEW_STATUS_LABEL, companyLabelForReview, deadlineOf, publicationDateOf } from './labels'
+import { FTS_LIVE_POOL_COMPANY_ID } from '../../live-source/live-discovery'
 
 /**
  * Review detail (Phase F brief §5, §6, §7, §8).
@@ -21,13 +31,25 @@ import { DOMAIN_LABEL, REVIEW_STATUS_LABEL, companyNameFor, deadlineOf, publicat
  */
 export default function ReviewDetailView() {
   const { reviewId } = useParams<{ reviewId: string }>()
-  const [item, setItem] = useState<ReviewItem | undefined>(() => reviewFixtureStore.item(reviewId ?? ''))
+  const [params] = useSearchParams()
+  const demo = isDemoReviewRequest(params.get(REVIEW_DEMO_PARAM))
+  const [item, setItem] = useState<ReviewItem | undefined>(() => resolveReviewItem(reviewId, params.get(REVIEW_DEMO_PARAM)))
   const [saved, setSaved] = useState<string | null>(null)
+
+  // Phase 31: restore saved decisions on direct entry and persist decisions made here.
+  useEffect(() => {
+    const uninstall = installReviewPersistence()
+    setItem(resolveReviewItem(reviewId, params.get(REVIEW_DEMO_PARAM)))
+    return uninstall
+  }, [])
 
   const onDecided = (updated: ReviewItem, label: string) => {
     setItem(updated)
     setSaved(`Saved: ${label} — the item moved to “${label}”.`)
   }
+
+  const runScope = params.get('run')
+  const runScopeQuery = runScope !== null && runScope.trim() !== '' ? runScope.trim() : null
 
   if (!item) {
     return (
@@ -39,7 +61,10 @@ export default function ReviewDetailView() {
             This review id is not in the local review store. No item was created or guessed.
           </p>
           <p>
-            <Link to="/review" className="btn">
+            <Link
+              to={demo ? `/review?${REVIEW_DEMO_PARAM}=${REVIEW_DEMO_VALUE}` : '/review'}
+              className="btn"
+            >
               Back to Human review
             </Link>
           </p>
@@ -51,7 +76,18 @@ export default function ReviewDetailView() {
   return (
     <section className="page">
       <nav className="crumbs" aria-label="Back">
-        <BackNavigation to="/review" label="Review queue" />
+        <BackNavigation
+          to={demo ? `/review?${REVIEW_DEMO_PARAM}=${REVIEW_DEMO_VALUE}` : '/review'}
+          label="Review queue"
+        />
+        {runScopeQuery !== null ? (
+          <>
+            {' '}
+            <Link to={`/history/${encodeURIComponent(runScopeQuery)}`}>Back to run {runScopeQuery}</Link>
+            {' '}
+            <Link to={`/review?run=${encodeURIComponent(runScopeQuery)}`}>Back to run queue</Link>
+          </>
+        ) : null}
       </nav>
 
       <header className="page__header">
@@ -74,7 +110,7 @@ export default function ReviewDetailView() {
           <h2 className="card__title">Identity</h2>
           <dl className="fields">
             <FieldRow label="Source title" value={item.sourceTitle || '(untitled)'} />
-            <FieldRow label="Company" value={companyNameFor(item.companyId)} />
+            <FieldRow label="Company" value={companyLabelForReview(item.companyId, FTS_LIVE_POOL_COMPANY_ID)} />
             <FieldRow label="Domain" value={DOMAIN_LABEL[item.domain]} />
             <FieldRow label="Requirement type" value={rfpDisplay(item.classification?.type) ?? 'Not classified'} />
           </dl>
@@ -241,6 +277,28 @@ export default function ReviewDetailView() {
           </section>
         )}
 
+        {item.reviewStatus === 'APPROVED' ? (
+          <section className="card" aria-label="Application next step">
+            <h2 className="card__title">Next step: application</h2>
+            <p className="dg-note" role="note">
+              Approval records a human decision — it is not eligibility proof and TVB does not
+              submit applications automatically. Open the official record below, verify the
+              deadline and requirements are still current, then apply through the source.
+            </p>
+            <p>
+              <a href={item.sourceUrl} target="_blank" rel="noreferrer noopener" className="urllink">
+                Open official {item.domain === 'funding' ? 'application' : 'submission'} page
+              </a>
+            </p>
+            <p>
+              <Link to={`/prepare/${encodeURIComponent(item.reviewId)}`} className="btn">
+                Open application preparation workspace
+              </Link>
+            </p>
+            <p className="dg-note">Deadline on record: {deadlineOf(item) ?? 'unknown — verify at the source'}.</p>
+          </section>
+        ) : null}
+
         {item.reviewStatus === 'APPROVED' ? <VaultWritePanel item={item} /> : null}
       </div>
     </section>
@@ -298,6 +356,13 @@ function DecisionPanel({
   const [reviewerId, setReviewerId] = useState('')
   const [note, setNote] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [associationWarning, setAssociationWarning] = useState<string | null>(null)
+  // Phase 32: approval must name its company explicitly. Prefilled when the
+  // item already carries a directory key; blank (and required) otherwise, so a
+  // shared-pool item can never slip through unattributed.
+  const [companyName, setCompanyName] = useState(() =>
+    (COMPANY_DIRECTORY_NAMES as readonly string[]).includes(item.companyId) ? item.companyId : '',
+  )
 
   const decide = (decision: ReviewDecisionKind) => {
     const reviewer = reviewerId.trim()
@@ -305,18 +370,34 @@ function DecisionPanel({
       setError('Enter a reviewer ID before recording a decision.')
       return
     }
+    let company = companyName.trim()
+    if (decision === 'APPROVED') {
+      if (company === '' || !(COMPANY_DIRECTORY_NAMES as readonly string[]).includes(company)) {
+        setError('Confirm the intended company from the directory before approving.')
+        return
+      }
+    }
     const evidence = note.trim() || null
+    const decidedAt = new Date().toISOString()
     try {
       const updated = reviewFixtureStore.apply({
         reviewId: item.reviewId,
         decision,
         reviewerId: reviewer,
-        decidedAt: new Date().toISOString(),
+        decidedAt,
         reason: decision === 'APPROVED' ? null : evidence,
         evidenceNotes: decision === 'APPROVED' ? evidence : null,
       })
       onDecided(updated, REVIEW_STATUS_LABEL[decision])
       setError(null)
+      if (decision === 'APPROVED') {
+        // The decision is already saved; the association is a separate,
+        // honestly reported step — its failure never rewrites the decision.
+        const associated = associateCompany(
+          { reviewId: item.reviewId, companyId: company, decidedAt, reviewerId: reviewer },
+        )
+        setAssociationWarning(associated.ok ? null : `Decision saved, but association failed: ${associated.error}`)
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'The decision could not be recorded.')
     }
@@ -356,6 +437,27 @@ function DecisionPanel({
         </label>
       </div>
 
+      <label className="rv-field" htmlFor="rv-company">
+        <span className="rv-field__label">Intended company (required to approve)</span>
+        <select
+          id="rv-company"
+          className="input rv-field__input"
+          value={companyName}
+          onChange={(event) => setCompanyName(event.target.value)}
+        >
+          <option value="">Select the intended company…</option>
+          {COMPANY_DIRECTORY_NAMES.map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="card__note">
+        Approval associates this opportunity with the confirmed company only — never by
+        keyword, shared-pool membership, or guess. Approval is not eligibility proof.
+      </p>
+
       <div className="rv-actions" role="group" aria-label="Record a decision">
         <button type="button" className="btn rv-btn rv-btn--approve" onClick={() => decide('APPROVED')}>
           Approve
@@ -374,6 +476,11 @@ function DecisionPanel({
       {error ? (
         <p className="rv-message rv-message--error" role="alert">
           {error}
+        </p>
+      ) : null}
+      {associationWarning ? (
+        <p className="rv-message rv-message--error" role="alert">
+          {associationWarning}
         </p>
       ) : null}
     </section>

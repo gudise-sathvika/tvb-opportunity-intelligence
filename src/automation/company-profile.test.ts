@@ -63,3 +63,16 @@ test('capabilities flatten present lists only, in tech→project→cert order', 
     'ISO 9001',
   ])
 })
+
+test('Phase 35: a directory-only name without verified provenance is refused', () => {
+  assert.equal(
+    isVerifiedCompanyProfile({ companyId: 'Avasant', name: 'Avasant', provenance: null }),
+    false,
+    'directory names are search keys, never verified profiles',
+  )
+  assert.equal(
+    isVerifiedCompanyProfile({ companyId: 'Avasant', name: 'Avasant' }),
+    false,
+    'missing provenance is refused, not defaulted',
+  )
+})

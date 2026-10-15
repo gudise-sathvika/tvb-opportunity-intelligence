@@ -257,3 +257,109 @@ test('a malformed response body is an adapter error, never a silent empty succes
   assert.equal(parsed.results.length, 0)
   assert.equal(parsed.errors[0]?.code, 'adapter_error')
 })
+
+test('Phase 07A: topic page URLs build only from well-formed topic identifiers', async () => {
+  const { buildEuTopicDetailsUrl, isEuSediaConstructedDetailUrl } = await import('./eu-sedia-adapter')
+  assert.equal(
+    buildEuTopicDetailsUrl('HORIZON-CL4-2027-01-MAT-PROD-49'),
+    'https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/HORIZON-CL4-2027-01-MAT-PROD-49',
+  )
+  for (const bad of [null, undefined, '', '   ', 'not a topic!', '../escape', 'lowercase-id', 'HORIZON']) {
+    assert.equal(buildEuTopicDetailsUrl(bad), '', `no URL for ${JSON.stringify(bad)}`)
+  }
+  assert.equal(
+    isEuSediaConstructedDetailUrl(
+      'https://ec.europa.eu/info/funding-tenders/opportunities/data/topicDetails/HORIZON-CL2-2024-TRANSFORMATIONS-01-06.json',
+    ),
+    true,
+  )
+  assert.equal(
+    isEuSediaConstructedDetailUrl(
+      'https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/HORIZON-CL4-2027-01-MAT-PROD-49',
+    ),
+    false,
+  )
+  assert.equal(isEuSediaConstructedDetailUrl(null), false)
+})
+
+test('Phase 07A: a centroid data-endpoint record keeps provenance with an unverified-link warning', async () => {
+  const { parseEuSediaBody } = await import('./eu-sedia-adapter')
+  const body = JSON.stringify({
+    totalResults: 1,
+    results: [
+      {
+        reference: '45703241HORIZONResearchandInnovationActions1696377600000',
+        url: 'https://ec.europa.eu/info/funding-tenders/opportunities/data/topicDetails/HORIZON-CL2-2024-TRANSFORMATIONS-01-06.json',
+        metadata: {
+          DATASOURCE: 'SEDIA_PRD_CENTRICITY',
+          type: '1',
+          status: '31094501',
+          title: 'Beyond the horizon',
+          callIdentifier: 'HORIZON-CL2-2024-TRANSFORMATIONS-01',
+          deadlineDate: '2024-02-07T17:00:00.000+0000',
+        },
+      },
+    ],
+  })
+  const outcome = parseEuSediaBody(body, { sourceId: 'SU-EU-001', observedAt: '2026-10-14T00:00:00.000Z', queryTerm: null })
+  assert.equal(outcome.results.length, 1)
+  assert.equal(
+    outcome.results[0].sourceUrl,
+    'https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/HORIZON-CL2-2024-TRANSFORMATIONS-01-06',
+  )
+  assert.ok(outcome.warnings.some((w) => w.includes('not source-verified')))
+})
+
+test('Phase 07B: link validation distinguishes source, constructed and unavailable destinations', async () => {
+  const { describeEuSediaLink, EU_PORTAL_SEARCH_URL } = await import('./eu-sedia-adapter')
+  assert.deepEqual(
+    describeEuSediaLink(
+      'https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/HORIZON-CL4-2027-01-MAT-PROD-49',
+    ),
+    {
+      url: 'https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/HORIZON-CL4-2027-01-MAT-PROD-49',
+      validation: 'source-provided',
+    },
+  )
+  assert.deepEqual(
+    describeEuSediaLink(
+      'https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/competitive-calls-cs/46813062',
+    ).validation,
+    'source-provided',
+  )
+  const constructed = describeEuSediaLink(
+    'https://ec.europa.eu/info/funding-tenders/opportunities/data/topicDetails/HORIZON-CL2-2024-TRANSFORMATIONS-01-06.json',
+  )
+  assert.equal(constructed.validation, 'constructed-unverified')
+  assert.ok(constructed.url.includes('/topic-details/HORIZON-CL2-2024-TRANSFORMATIONS-01-06'))
+  assert.deepEqual(describeEuSediaLink(
+    'https://ec.europa.eu/info/funding-tenders/opportunities/data/topicDetails/lowercase-id.json',
+  ), { url: '', validation: 'confirmed-unavailable' })
+  for (const bad of [null, undefined, '', '   ', 'relative/path']) {
+    assert.equal(describeEuSediaLink(bad).validation, 'confirmed-unavailable', `unavailable for ${JSON.stringify(bad)}`)
+  }
+  assert.ok(EU_PORTAL_SEARCH_URL.startsWith('https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/'))
+})
+
+test('Phase 07B: parsed results carry their link validation for honest rendering', async () => {
+  const { parseEuSediaBody } = await import('./eu-sedia-adapter')
+  const body = JSON.stringify({
+    totalResults: 2,
+    results: [
+      {
+        reference: 'A1',
+        url: 'https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/HORIZON-CL4-2027-01-MAT-PROD-49',
+        metadata: { DATASOURCE: 'SEDIA', type: '1', status: '31094502', title: 'Canonical topic', deadlineDate: '2027-02-02T00:00:00.000+0000' },
+      },
+      {
+        reference: 'B2',
+        url: 'https://ec.europa.eu/info/funding-tenders/opportunities/data/topicDetails/HORIZON-CL2-2024-TRANSFORMATIONS-01-06.json',
+        metadata: { DATASOURCE: 'SEDIA_PRD_CENTRICITY', type: '1', status: '31094501', title: 'Centroid duplicate', deadlineDate: '2024-02-07T17:00:00.000+0000' },
+      },
+    ],
+  })
+  const outcome = parseEuSediaBody(body, { sourceId: 'SU-EU-001', observedAt: '2026-10-14T00:00:00.000Z', queryTerm: null })
+  assert.equal(outcome.results.length, 2)
+  assert.equal(outcome.results[0].linkValidation, 'source-provided')
+  assert.equal(outcome.results[1].linkValidation, 'constructed-unverified')
+})

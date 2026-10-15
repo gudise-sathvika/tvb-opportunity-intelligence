@@ -70,3 +70,15 @@ export function companyNameFor(companyId: string): string {
   const record = getRecord(companyId)
   return record ? titleOf(record) : companyId
 }
+
+/**
+ * Phase 15A shared-pool company label, used identically by the review queue
+ * and the review detail page. A broad shared discovery belongs to the pool,
+ * not to any company; every other item shows the same key as everywhere else
+ * (vault title when recorded, otherwise the raw search key). This names the
+ * key — it never claims a verified company identity.
+ */
+export function companyLabelForReview(companyId: string, poolCompanyId: string): string {
+  if (companyId === poolCompanyId) return 'Unassigned (shared discovery)'
+  return companyNameFor(companyId)
+}

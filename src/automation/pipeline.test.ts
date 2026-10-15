@@ -244,3 +244,32 @@ test('funding and procurement separation holds end-to-end', () => {
   for (const candidate of funding.candidates) assert.notEqual(candidate.classification?.type, 'Notice')
   for (const candidate of procurement.candidates) assert.equal(candidate.classification?.type, 'Notice')
 })
+test('Agent 3 audit: the discovery pipeline attaches no matching verdicts', () => {
+  // Discovery ends at dedup/review handoff. Matching engines run only on
+  // explicit invocation (live match check, verify scripts); a discovery run
+  // must never produce proposals, match statuses, or company attributions of
+  // matchedness — hence Agent 3 honestly reports "Not run".
+  const results = [
+    runCandidatePipeline(
+      fixtureRequest({ sourceId: FIXTURE_FUNDING_SOURCE_ID, domain: 'funding' }),
+      { registry: DEFAULT_SOURCE_REGISTRY, adapter: FUNDING_ADAPTER },
+    ),
+    runCandidatePipeline(
+      fixtureRequest({ sourceId: FIXTURE_PROCUREMENT_SOURCE_ID }),
+      { registry: DEFAULT_SOURCE_REGISTRY, adapter: PROCUREMENT_ADAPTER },
+    ),
+  ]
+  for (const result of results) {
+    assert.ok(result.candidates.length > 0, 'fixture run must yield candidates for this assertion to mean anything')
+    for (const candidate of result.candidates) {
+      const snapshot = candidate as unknown as Record<string, unknown>
+      for (const field of ['proposal', 'proposals', 'matchedSignals', 'matchStatus', 'matchedCompanyId']) {
+        assert.equal(
+          snapshot[field],
+          undefined,
+          `discovery candidate must not carry ${field}`,
+        )
+      }
+    }
+  }
+})

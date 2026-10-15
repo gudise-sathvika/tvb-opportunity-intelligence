@@ -10,6 +10,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { DEFAULT_SOURCE_REGISTRY, EU_SEDIA_SOURCE_ID } from '../automation/registry'
+import { classifyOpportunityState } from '../automation/opportunity-status'
 import { EU_SEDIA_LIVE_POOL_COMPANY_ID, createLiveEuSediaDiscovery, euSediaLiveRegistry } from './live-eu-sedia-discovery'
 import type { EuSediaBridgeSearchRequest, EuSediaBridgeSearchResponse } from './eu-sedia-bridge/contract'
 
@@ -46,12 +47,14 @@ function capturingBridge(onRequest?: (request: EuSediaBridgeSearchRequest) => vo
   }
 }
 
-test('the live run-scoped registry marks ONLY the EU source AVAILABLE and never mutates the global registry', () => {
-  assert.equal(DEFAULT_SOURCE_REGISTRY.get(EU_SEDIA_SOURCE_ID)?.accessState, 'UNKNOWN')
+test('the live run-scoped registry marks the EU source AVAILABLE and never mutates the global registry', () => {
+  // Phase 02: a verified read-only search promoted the EU source to AVAILABLE globally.
+  assert.equal(DEFAULT_SOURCE_REGISTRY.get(EU_SEDIA_SOURCE_ID)?.accessState, 'AVAILABLE')
   const live = euSediaLiveRegistry()
   assert.equal(live.get(EU_SEDIA_SOURCE_ID)?.accessState, 'AVAILABLE')
   assert.equal(live.size, DEFAULT_SOURCE_REGISTRY.size)
-  assert.equal(DEFAULT_SOURCE_REGISTRY.get(EU_SEDIA_SOURCE_ID)?.accessState, 'UNKNOWN')
+  // The global registry is untouched (same value before and after building the view).
+  assert.equal(DEFAULT_SOURCE_REGISTRY.get(EU_SEDIA_SOURCE_ID)?.accessState, 'AVAILABLE')
 })
 
 test('a live run goes through the real adapter and pipeline, preserving EU status and raw type', async () => {
@@ -79,6 +82,48 @@ test('a live run goes through the real adapter and pipeline, preserving EU statu
   const outcome = store.finishRun(context, [company])
   assert.equal(outcome.outcome, 'SUCCESS')
   assert.equal(outcome.counts.candidatesCreated, 2)
+})
+
+test('Phase 01B: the shared ingest gate admits only open calls and preserves the rest', async () => {
+  // One record per classifier state. Only `open` + a future deadline is
+  // actionable; forthcoming/closed/expired and unknown are preserved excluded.
+  const results = [
+    record('OPEN', { type: ['1'], status: ['31094502'], title: ['Open call'], deadlineDate: ['2027-01-01T17:00:00.000+01:00'] }),
+    record('FORTHCOMING', { type: ['1'], status: ['31094501'], title: ['Forthcoming call'], deadlineDate: ['2027-01-01T17:00:00.000+01:00'] }),
+    record('EXPIRED', { type: ['1'], status: ['31094502'], title: ['Expired call'], deadlineDate: ['2026-01-01T17:00:00.000+01:00'] }),
+    record('CLOSED', { type: ['1'], status: ['31094503'], title: ['Closed call'], deadlineDate: ['2027-01-01T17:00:00.000+01:00'] }),
+    record('NO-DEADLINE', { type: ['1'], status: ['31094502'], title: ['Open call with no deadline'] }),
+    record('BAD-STATUS', { type: ['1'], status: ['99999999'], title: ['Unrecognized status'], deadlineDate: ['2027-01-01T17:00:00.000+01:00'] }),
+  ]
+  const store = createLiveEuSediaDiscovery({
+    bridge: async () => ({
+      ok: true,
+      status: 200,
+      body: JSON.stringify({ apiVersion: '1.0', totalResults: results.length, results }),
+    }),
+    requestedAt: REQUESTED_AT,
+  })
+  const context = store.beginRun({ keyword: '', sector: 'all', location: 'all' })
+  const company = await store.runCompany(context, 'Aavo')
+
+  // The raw pool keeps every returned record (nothing is dropped at ingest).
+  assert.equal(company.candidates.length, 6)
+  const states = company.candidates.map((c) => classifyOpportunityState(c, REQUESTED_AT).state)
+  assert.deepEqual(states, ['open', 'forthcoming', 'expired', 'closed', 'unknown', 'unknown'])
+
+  assert.deepEqual(company.actionableCandidates?.map((c) => c.sourceRecordId), ['OPEN'])
+  assert.deepEqual(
+    company.excludedCandidates?.map((c) => c.sourceRecordId),
+    ['FORTHCOMING', 'EXPIRED', 'CLOSED', 'NO-DEADLINE', 'BAD-STATUS'],
+  )
+  for (const candidate of company.excludedCandidates ?? []) {
+    assert.equal(candidate.provenance.sourceId, EU_SEDIA_SOURCE_ID, 'excluded records keep full provenance')
+  }
+  assert.equal(
+    (company.actionableCandidates?.length ?? 0) + (company.excludedCandidates?.length ?? 0),
+    company.candidates.length,
+    'each candidate is counted exactly once',
+  )
 })
 
 test('a run issues ONE shared search for every selected company without a match claim', async () => {

@@ -131,6 +131,39 @@ export const EU_SEDIA_TOPIC_DETAILS_PREFIX =
   'https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/'
 
 /**
+ * Phase 07A: official topic-identifier grammar as the portal publishes it
+ * (`metadata.identifier`, e.g. `HORIZON-CL4-2027-01-MAT-PROD-49`): uppercase
+ * programme key followed by one or more `-SUBKEY` segments. A rewrite is only
+ * attempted for basenames that match — anything else is not a topic page and
+ * must never gain a working-looking URL.
+ */
+export const EU_SEDIA_TOPIC_ID_PATTERN = /^[A-Z][A-Z0-9]*(-[A-Z0-9]+)+$/
+
+/**
+ * Phase 07A centralized builder: the portal's canonical human topic route for
+ * a verified topic identifier. Returns `''` for anything that is not a
+ * well-formed topic id — never a guess.
+ */
+export function buildEuTopicDetailsUrl(topicId: string | null | undefined): string {
+  const id = (topicId ?? '').trim()
+  if (id === '' || !EU_SEDIA_TOPIC_ID_PATTERN.test(id)) return ''
+  return `${EU_SEDIA_TOPIC_DETAILS_PREFIX}${encodeURIComponent(id)}`
+}
+
+/**
+ * Phase 07A: true only for machine data-endpoint URLs whose human destination
+ * is constructed (not source-supplied) and therefore unverified. Verified
+ * live 2026-10-14: `data/topicDetails/{id}.json` answers HTTP 404 for every
+ * id probed — including genuinely open topics — so these index records carry
+ * no live portal destination of their own.
+ */
+export function isEuSediaConstructedDetailUrl(raw: string | null | undefined): boolean {
+  const value = (raw ?? '').trim()
+  if (value === '') return false
+  return EU_SEDIA_DATA_TOPIC_DETAILS_PATTERN.test(value)
+}
+
+/**
  * Phase 21D: some SEDIA records — notably the `SEDIA_PRD_CENTRICITY` centroid
  * duplicates — carry a machine **data** endpoint as their `url`
  * (`.../opportunities/data/topicDetails/<TOPIC-ID>.json`). Clicking it renders
@@ -149,13 +182,46 @@ const EU_SEDIA_DATA_TOPIC_DETAILS_PATTERN =
  *  - missing / non-absolute → `''` (destination unavailable), never fabricated.
  */
 export function normalizeEuSediaOfficialUrl(raw: string | null | undefined): string {
-  const value = (raw ?? '').trim()
-  if (value === '') return ''
-  const data = EU_SEDIA_DATA_TOPIC_DETAILS_PATTERN.exec(value)
-  if (data !== null) return `${EU_SEDIA_TOPIC_DETAILS_PREFIX}${encodeURIComponent(data[1]!)}`
-  if (!/^https?:\/\//i.test(value)) return ''
-  return value
+  return describeEuSediaLink(raw).url
 }
+
+export type EuLinkValidation = 'source-provided' | 'constructed-unverified' | 'confirmed-unavailable'
+
+export interface EuSediaLink {
+  readonly url: string
+  readonly validation: EuLinkValidation
+}
+
+/**
+ * Phase 07B link-quality verdict for one source-supplied URL. `source-provided`
+ * keeps the portal's own destination verbatim; `constructed-unverified` marks a
+ * destination the adapter built from an identifier (human route, but the source
+ * never confirmed it — HTTP 200 on the portal shell proves nothing since every
+ * route, including garbage ones, serves the identical shell); anything without
+ * a usable destination is `confirmed-unavailable`, never a guess.
+ */
+export function describeEuSediaLink(raw: string | null | undefined): EuSediaLink {
+  const value = (raw ?? '').trim()
+  if (value === '') return { url: '', validation: 'confirmed-unavailable' }
+  const data = EU_SEDIA_DATA_TOPIC_DETAILS_PATTERN.exec(value)
+  if (data !== null) {
+    const built = buildEuTopicDetailsUrl(data[1])
+    return built === ''
+      ? { url: '', validation: 'confirmed-unavailable' }
+      : { url: built, validation: 'constructed-unverified' }
+  }
+  if (!/^https?:\/\//i.test(value)) return { url: '', validation: 'confirmed-unavailable' }
+  return { url: value, validation: 'source-provided' }
+}
+
+/**
+ * Phase 07B official-domain fallback for unverified destinations: the portal's
+ * public search/listing screen. The route serves the portal (HTTP 200, official
+ * domain) but, like every portal route, renders client-side — deep content is
+ * unverified, so this is labelled a search fallback, never a detail page.
+ */
+export const EU_PORTAL_SEARCH_URL =
+  'https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/calls-for-proposals'
 
 /* ------------------------------------------------------------------ */
 /* Query plan                                                          */
@@ -417,7 +483,14 @@ export function parseEuSediaBody(body: string, context: EuSediaParseContext): Eu
 
     const title = firstString(metadata['title']) ?? firstString(metadata['callIdentifier']) ?? reference
     const callIdentifier = firstString(metadata['callIdentifier'])
-    const url = normalizeEuSediaOfficialUrl(firstString(entry['url']))
+    const rawUrl = firstString(entry['url'])
+    const link = describeEuSediaLink(rawUrl)
+    const url = link.url
+    if (link.validation === 'constructed-unverified') {
+      warnings.push(
+        `record ${reference} links to a constructed topic page (the source carries only a machine data endpoint); the detail page is not source-verified`,
+      )
+    }
     const deadline = normalizeEuSediaDate(metadata['deadlineDate'])
     const publicationDate = normalizeEuSediaDate(metadata['es_SortDate'])
 
@@ -432,6 +505,7 @@ export function parseEuSediaBody(body: string, context: EuSediaParseContext): Eu
       country: 'EU',
       rawType: recordType,
       sourceStatus: status,
+      linkValidation: link.validation,
       rawPayload: JSON.stringify(metadata),
       rawProvenance: {
         sourceId: context.sourceId,

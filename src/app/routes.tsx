@@ -21,7 +21,12 @@ import Contracts from '../pages/Contracts'
 import ContractDetail from '../pages/ContractDetail'
 import Review from '../pages/Review'
 import ReviewDetail from '../pages/ReviewDetail'
+import FundingReview from '../pages/FundingReview'
+import ProcurementReview from '../pages/ProcurementReview'
+import Prepare from '../pages/Prepare'
 import Discovery from '../pages/Discovery'
+import History from '../pages/History'
+import HistoryRunDetail from '../pages/HistoryRunDetail'
 import MatchReview from '../pages/MatchReview'
 import MatchReviewDetail from '../pages/MatchReviewDetail'
 import ProcurementMatchReview from '../pages/ProcurementMatchReview'
@@ -80,9 +85,15 @@ export default function AppRoutes() {
         <Route path="/contracts/:id" element={<ContractDetail />} />
 
         <Route path="/review" element={<Review />} />
+        <Route path="/review/funding" element={<FundingReview />} />
+        <Route path="/review/procurement" element={<ProcurementReview />} />
         <Route path="/review/:reviewId" element={<ReviewDetail />} />
+        <Route path="/prepare/:reviewId" element={<Prepare />} />
 
         <Route path="/discovery" element={<Discovery />} />
+
+        <Route path="/history" element={<History />} />
+        <Route path="/history/:runId" element={<HistoryRunDetail />} />
 
         <Route path="/match-review" element={<MatchReview />} />
         <Route path="/match-review/:proposalId" element={<MatchReviewDetail />} />

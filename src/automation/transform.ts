@@ -16,6 +16,7 @@
 
 import type { AdapterResult, ExecutionError, RawResult } from './types'
 import { candidateIdFor, deepFreeze, type DiscoveryCandidate } from './candidate'
+import { enrichOpportunityEvidence } from './opportunity-enrichment'
 
 export type TransformKind = 'success' | 'partial' | 'empty' | 'blocked' | 'failed'
 
@@ -69,6 +70,8 @@ export function candidateFromRawResult(result: AdapterResult, raw: RawResult): D
     sourceCountry: raw.country,
     sourceRawType: raw.rawType,
     sourceStatus: raw.sourceStatus ?? null,
+    sourceLinkValidation: raw.linkValidation ?? null,
+    sourceEvidence: enrichOpportunityEvidence(raw, rp.observedAt),
     domain: result.domain,
     candidateType: 'opportunity',
     candidateStatus: 'NEW',

@@ -16,7 +16,10 @@
  * bridge request is issued ONCE per run and its response is replayed for each
  * selected company. The selected companies share one source pool; they are NOT
  * company-matched — no company fact is inferred, and broad results are never
- * restricted by a company name. Review items are still produced per company run.
+ * restricted by a company name. Phase 15A: the review handoff therefore keeps
+ * one canonical unassigned item per unique source record (shared-pool
+ * attribution), while per-company display lists still show the shared pool
+ * each company was shown.
  *
  * Honesty:
  *  - bridge/source failures are REAL FAILED results through the real pipeline,
@@ -50,6 +53,8 @@ import type { SourceRegistry } from '../automation/registry'
 import { createSourceRegistry, DEFAULT_SOURCE_REGISTRY, GRANTS_GOV_SOURCE_ID } from '../automation/registry'
 import { reviewFixtureStore } from '../automation/review-fixture'
 import { createReviewQueue, reviewStatusForCandidate } from '../automation/review-queue'
+import { dedupeHandoffCandidates } from './live-discovery'
+import { partitionByActionability } from '../automation/opportunity-status'
 import { createGrantsGovAdapter } from '../automation/grantsgov-adapter'
 import type { GrantsGovTransport } from '../automation/grantsgov-adapter'
 import { GRANTS_GOV_BRIDGE_SEARCH_PATH } from './grantsgov-bridge/contract'
@@ -311,6 +316,13 @@ export function createLiveGrantsGovDiscovery(options: {
       // here was WRONG and dropped real source matches (Phase 20E): every record
       // the source returned flows through the pipeline.
       const candidates = result.candidates
+      // Phase 01B ingest gate: the SAME shared classifier TED uses. Only records
+      // the classifier marks `open` (posted, future close date, official URL)
+      // may enter the actionable pool; everything else (forecasted/expired/
+      // closed/archived/unknown) is preserved as `excludedCandidates` (never
+      // dropped) with full provenance and can never be presented as open. A
+      // missing deadline or an unknown status is never read as open.
+      const { actionable, excluded } = partitionByActionability(candidates, context.requestedAt)
       const needsReview = candidates.filter(candidateNeedsReview).length
       return deepFreeze({
         companyId: cleaned,
@@ -324,6 +336,8 @@ export function createLiveGrantsGovDiscovery(options: {
         needsReview,
         sourceResults: result.sourceResults,
         candidates,
+        actionableCandidates: actionable,
+        excludedCandidates: excluded,
       })
     },
 
@@ -353,7 +367,15 @@ export function createLiveGrantsGovDiscovery(options: {
         allCandidates.push(...company.candidates)
       }
 
-      const reviewQueue = createReviewQueue(allCandidates, { createdAt: context.requestedAt })
+      // Phase 15A: the broad Grants.gov response is shared verbatim across the
+      // run (one bridge request, replayed per company), so the handoff keeps
+      // one canonical unassigned item per unique source record instead of one
+      // company-attributed item per company. Per-company display lists above
+      // are untouched.
+      const reviewQueue = createReviewQueue(
+        dedupeHandoffCandidates(allCandidates, [GRANTS_GOV_SOURCE_ID], GRANTS_GOV_LIVE_POOL_COMPANY_ID),
+        { createdAt: context.requestedAt },
+      )
       reviewFixtureStore.addReviewItems(reviewQueue)
       const outcome: DiscoveryRunOutcome = deepFreeze({
         runId: context.runId,

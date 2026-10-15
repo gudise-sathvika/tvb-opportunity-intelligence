@@ -42,6 +42,7 @@ import type { SourceRegistry } from '../automation/registry'
 import { createSourceRegistry, DEFAULT_SOURCE_REGISTRY, EU_SEDIA_SOURCE_ID } from '../automation/registry'
 import { reviewFixtureStore } from '../automation/review-fixture'
 import { createReviewQueue, reviewStatusForCandidate } from '../automation/review-queue'
+import { partitionByActionability } from '../automation/opportunity-status'
 import { createEuSediaAdapter } from '../automation/eu-sedia-adapter'
 import type { EuSediaTransport } from '../automation/eu-sedia-adapter'
 import { EU_SEDIA_BRIDGE_SEARCH_PATH } from './eu-sedia-bridge/contract'
@@ -263,6 +264,14 @@ export function createLiveEuSediaDiscovery(options: {
       const input = inputFor(context, cleaned)
       const result = orchestrateDiscoveryRun(input, dependenciesFor(adapter))
       const candidates = result.candidates
+      // Phase 01B ingest gate: the SAME shared classifier TED uses. Only records
+      // the classifier marks `open` (open-for-submission, future deadline,
+      // official EU URL) may enter the actionable pool; everything else
+      // (forthcoming/closed/expired/unknown) is preserved as
+      // `excludedCandidates` (never dropped) with full provenance and can never
+      // be presented as open. A missing deadline or an unknown status is never
+      // read as open.
+      const { actionable, excluded } = partitionByActionability(candidates, context.requestedAt)
       const needsReview = candidates.filter(candidateNeedsReview).length
       return deepFreeze({
         companyId: cleaned,
@@ -276,6 +285,8 @@ export function createLiveEuSediaDiscovery(options: {
         needsReview,
         sourceResults: result.sourceResults,
         candidates,
+        actionableCandidates: actionable,
+        excludedCandidates: excluded,
       })
     },
 

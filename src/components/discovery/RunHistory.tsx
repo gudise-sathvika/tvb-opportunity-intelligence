@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import type { DiscoveryRunOutcome } from '../../automation/discovery-fixture'
 import { COMPANY_STATE_FOR_OUTCOME, DOMAIN_LABEL, OUTCOME_LABEL } from './labels'
 
@@ -27,6 +28,7 @@ export default function RunHistory({ runs }: { runs: readonly DiscoveryRunOutcom
               <span className={`dg-chip dg-chip--${COMPANY_STATE_FOR_OUTCOME[run.outcome]}`}>
                 {OUTCOME_LABEL[run.outcome]}
               </span>
+              <Link to={`/history/${encodeURIComponent(run.runId)}`}>Open run detail</Link>
             </li>
           ))}
         </ul>

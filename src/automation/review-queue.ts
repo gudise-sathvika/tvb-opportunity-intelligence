@@ -30,6 +30,7 @@ import type {
 } from './candidate'
 import { deepFreeze } from './candidate'
 import type { DiscoveryDomain } from './types'
+import type { OpportunityEnrichment } from './opportunity-enrichment'
 
 /* ------------------------------------------------------------------ */
 /* Review status vocabulary                                             */
@@ -118,6 +119,12 @@ export interface ReviewItem {
   classification: ClassificationMetadata | null
   normalization: NormalizationMetadata | null
   duplicate: DuplicateMetadata | null
+  /**
+   * Phase 33: additive requirement evidence carried from the candidate
+   * (programmes, documents, lifecycle notes). Absent on items created before
+   * enrichment existed. Review evidence only — never a matching input.
+   */
+  sourceEvidence?: OpportunityEnrichment | null
   provenance: CandidateProvenance
   reviewStatus: ReviewStatus
   audit: readonly ReviewAuditEntry[]
@@ -209,6 +216,7 @@ export function createReviewItem(candidate: DiscoveryCandidate, options: ReviewI
     classification: candidate.classification,
     normalization: candidate.normalization,
     duplicate: candidate.duplicate,
+    sourceEvidence: candidate.sourceEvidence ?? null,
     provenance: candidate.provenance,
     reviewStatus: reviewStatusForCandidate(candidate),
     audit: deepFreeze([]),
@@ -236,6 +244,44 @@ export function createReviewQueue(
     items.push(createReviewItem(candidate, { createdAt: options.createdAt, reviewId: reviewIdFor(candidate.candidateId, candidate.candidateStatus, occurrence) }))
   }
   return deepFreeze(items)
+}
+
+/**
+ * Phase 05 pagination slice. Pure arithmetic shared by the Human review
+ * sections: filtering always happens BEFORE this function is called, the page
+ * is clamped so a decision can never strand the reviewer on an empty page
+ * while earlier items remain, and slices never overlap (no duplicate items
+ * across pages). `end` is exclusive; the human range text derives
+ * `start + 1 … end` (or "0 of 0" when empty).
+ */
+export interface PageSlice {
+  readonly safePage: number
+  readonly totalPages: number
+  readonly start: number
+  readonly end: number
+}
+
+export function paginateList(total: number, page: number, pageSize: number): PageSlice {
+  const safeTotal = Number.isFinite(total) ? Math.max(0, Math.floor(total)) : 0
+  const safeSize = Number.isFinite(pageSize) ? Math.max(1, Math.floor(pageSize)) : 1
+  const totalPages = Math.max(1, Math.ceil(safeTotal / safeSize))
+  const safePage = Math.min(Math.max(1, Number.isFinite(page) ? Math.floor(page) : 1), totalPages)
+  const start = (safePage - 1) * safeSize
+  return { safePage, totalPages, start, end: Math.min(start + safeSize, safeTotal) }
+}
+
+/**
+ * Phase 05 review sections. Split uses the record's canonical `domain` — never
+ * title text. Anything that is neither funding nor procurement falls into an
+ * explicit `unclassified` bucket so no record can silently disappear; every
+ * item lands in exactly one section.
+ */
+export type ReviewSectionKey = 'funding' | 'procurement' | 'unclassified'
+
+export function reviewSectionFor(domain: string): ReviewSectionKey {
+  if (domain === 'funding') return 'funding'
+  if (domain === 'procurement') return 'procurement'
+  return 'unclassified'
 }
 
 /**

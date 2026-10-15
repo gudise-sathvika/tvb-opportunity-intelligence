@@ -4586,3 +4586,29 @@ a.mini:hover .mini__count {
   line-height: 1.55;
   color: var(--text-muted);
 }
+
+/* ---------------- Phase 36: shared control refinements ---------------- */
+
+/* Disabled controls read as disabled everywhere (previously only pagers). */
+.btn:disabled,
+.btn[aria-disabled='true'] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Review pagination row: range + page position + Previous/Next as one unit. */
+.rv-pager {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 12px 0 20px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+/* Review subsections (funding/procurement/unclassified) keep breathing room
+   when stacked, without touching single-section layouts. */
+section[aria-label$='review'] + section[aria-label$='review'] {
+  margin-top: 20px;
+}

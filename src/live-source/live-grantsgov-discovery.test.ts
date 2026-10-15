@@ -11,6 +11,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { DEFAULT_SOURCE_REGISTRY, GRANTS_GOV_SOURCE_ID } from '../automation/registry'
+import { classifyOpportunityState } from '../automation/opportunity-status'
 import {
   GRANTS_GOV_LIVE_POOL_COMPANY_ID,
   createLiveGrantsGovDiscovery,
@@ -45,23 +46,24 @@ const HITS = [
   },
 ]
 
-function capturingBridge(onRequest?: (request: GrantsGovBridgeSearchRequest) => void) {
+function capturingBridge(onRequest?: (request: GrantsGovBridgeSearchRequest) => void, hits: readonly unknown[] = HITS) {
   return async (request: GrantsGovBridgeSearchRequest): Promise<GrantsGovBridgeSearchResponse> => {
     onRequest?.(request)
-    return { ok: true, status: 200, body: grantBody(HITS) }
+    return { ok: true, status: 200, body: grantBody(hits) }
   }
 }
 
-test('the live run-scoped registry marks ONLY Grants.gov AVAILABLE and never mutates the global registry', () => {
-  assert.equal(DEFAULT_SOURCE_REGISTRY.get(GRANTS_GOV_SOURCE_ID)?.accessState, 'UNKNOWN')
+test('the live run-scoped registry marks Grants.gov AVAILABLE and never mutates the global registry', () => {
+  // Phase 02: a verified read-only search promoted Grants.gov to AVAILABLE globally.
+  assert.equal(DEFAULT_SOURCE_REGISTRY.get(GRANTS_GOV_SOURCE_ID)?.accessState, 'AVAILABLE')
 
   const live = grantsGovLiveRegistry()
   assert.equal(live.get(GRANTS_GOV_SOURCE_ID)?.accessState, 'AVAILABLE')
   assert.equal(live.size, DEFAULT_SOURCE_REGISTRY.size)
   assert.equal(live.get('SU-US-001')?.accessState, DEFAULT_SOURCE_REGISTRY.get('SU-US-001')?.accessState)
 
-  // The global registry is untouched.
-  assert.equal(DEFAULT_SOURCE_REGISTRY.get(GRANTS_GOV_SOURCE_ID)?.accessState, 'UNKNOWN')
+  // The global registry is untouched (same value before and after building the view).
+  assert.equal(DEFAULT_SOURCE_REGISTRY.get(GRANTS_GOV_SOURCE_ID)?.accessState, 'AVAILABLE')
 })
 
 test('a live run with a recorded Grants.gov body goes through the real adapter, pipeline, and preserves source status', async () => {
@@ -99,6 +101,46 @@ test('a live run with a recorded Grants.gov body goes through the real adapter, 
   assert.equal(outcome.counts.blockedSources, 0)
   assert.equal(outcome.counts.failedSources, 0)
   assert.equal(outcome.counts.candidatesCreated, 2)
+})
+
+test('Phase 01B: the shared ingest gate admits only open opportunities and preserves the rest', async () => {
+  // One record per classifier state. `posted` with a future close is open;
+  // every other status/date combination must be excluded, never presented open.
+  const hits = [
+    { id: '2001', title: 'OPEN', agencyName: 'A', openDate: '2026-01-01', closeDate: '2027-01-01', oppStatus: 'posted' },
+    { id: '2002', title: 'FORTHCOMING', agencyName: 'A', openDate: '2026-01-01', closeDate: '2027-01-01', oppStatus: 'forecasted' },
+    { id: '2003', title: 'EXPIRED', agencyName: 'A', openDate: '2025-01-01', closeDate: '2026-01-01', oppStatus: 'posted' },
+    { id: '2004', title: 'CLOSED', agencyName: 'A', openDate: '2026-01-01', closeDate: '2027-01-01', oppStatus: 'closed' },
+    { id: '2005', title: 'HISTORICAL', agencyName: 'A', openDate: '2026-01-01', closeDate: '2027-01-01', oppStatus: 'archived' },
+    { id: '2006', title: 'UNKNOWN', agencyName: 'A', openDate: '2026-01-01', closeDate: '', oppStatus: 'posted' },
+  ]
+  const store = createLiveGrantsGovDiscovery({
+    bridge: async () => ({ ok: true, status: 200, body: grantBody(hits) }),
+    requestedAt: REQUESTED_AT,
+  })
+  const context = store.beginRun({ keyword: '', sector: 'all', location: 'all' })
+  const company = await store.runCompany(context, 'Aavo')
+
+  // The raw pool keeps every returned record (nothing is dropped at ingest).
+  assert.deepEqual(company.candidates.map((c) => c.sourceRecordId), ['2001', '2002', '2003', '2004', '2005', '2006'])
+
+  const states = company.candidates.map((c) => classifyOpportunityState(c, REQUESTED_AT).state)
+  assert.deepEqual(states, ['open', 'forthcoming', 'expired', 'closed', 'historical', 'unknown'])
+
+  // Only the single open record is actionable; the rest are preserved excluded.
+  assert.deepEqual(company.actionableCandidates?.map((c) => c.sourceRecordId), ['2001'])
+  assert.deepEqual(
+    company.excludedCandidates?.map((c) => c.sourceRecordId),
+    ['2002', '2003', '2004', '2005', '2006'],
+  )
+  for (const candidate of company.excludedCandidates ?? []) {
+    assert.equal(candidate.provenance.sourceId, GRANTS_GOV_SOURCE_ID, 'excluded records keep full provenance')
+  }
+  assert.equal(
+    (company.actionableCandidates?.length ?? 0) + (company.excludedCandidates?.length ?? 0),
+    company.candidates.length,
+    'each candidate is counted exactly once',
+  )
 })
 
 test('the source applies the keyword: the store never drops returned records by a title substring (Phase 20E)', async () => {
@@ -172,4 +214,105 @@ test('a bridge failure is a real FAILED run, never an invented empty success', a
   const outcome = store.finishRun(context, [company])
   assert.equal(outcome.outcome, 'FAILED')
   assert.equal(outcome.counts.failedSources, 1)
+})
+
+const OPEN_HITS = [
+  {
+    id: '2001',
+    number: 'DOE-C',
+    title: 'OPEN SOLAR RESEARCH GRANT',
+    agencyName: 'Department of Energy',
+    openDate: '2026-01-15',
+    closeDate: '12/01/2026',
+    oppStatus: 'posted',
+  },
+  {
+    id: '2002',
+    number: 'DOE-D',
+    title: 'OPEN WIND RESEARCH GRANT',
+    agencyName: 'Department of Energy',
+    openDate: '2026-02-01',
+    closeDate: '12/15/2026',
+    oppStatus: 'posted',
+  },
+]
+
+test('Phase 15A: one shared pool yields canonical unassigned items, not company triplets', async () => {
+  const requests: GrantsGovBridgeSearchRequest[] = []
+  const store = createLiveGrantsGovDiscovery({
+    bridge: capturingBridge((request) => requests.push(request), OPEN_HITS),
+    requestedAt: REQUESTED_AT,
+  })
+  const context = store.beginRun({})
+  const companies = [
+    await store.runCompany(context, 'COSCI'),
+    await store.runCompany(context, 'Datacolor AI'),
+    await store.runCompany(context, 'DedicateusIT'),
+  ]
+  // One shared bridge request for the whole run, replayed per company.
+  assert.equal(requests.length, 1)
+  assert.equal(requests[0].companyId, GRANTS_GOV_LIVE_POOL_COMPANY_ID)
+  const outcome = store.finishRun(context, companies)
+  // Per-company display lists still show the shared pool each company saw…
+  for (const company of companies) assert.equal(company.candidates.length, 2)
+  // …but the review handoff carries one canonical item per unique record.
+  assert.equal(outcome.reviewQueue.length, 2)
+  assert.deepEqual(
+    outcome.reviewQueue.map((item) => item.reviewId).sort(),
+    ['RI:DC:SU-GRANTS-001:2001:NORMALIZED', 'RI:DC:SU-GRANTS-001:2002:NORMALIZED'],
+  )
+  for (const item of outcome.reviewQueue) {
+    assert.equal(item.companyId, GRANTS_GOV_LIVE_POOL_COMPANY_ID)
+    assert.ok(!item.reviewId.includes('#'), 'no occurrence suffix on canonical items')
+  }
+  assert.equal(outcome.needsReview, 2)
+})
+
+test('Phase 15A: approving a canonical item keeps queue, detail, and counts consistent', async () => {
+  const { reviewFixtureStore } = await import('../automation/review-fixture')
+  const { resolveReviewItem } = await import('../automation/review-source')
+  const store = createLiveGrantsGovDiscovery({ bridge: capturingBridge(undefined, OPEN_HITS), requestedAt: REQUESTED_AT })
+  const context = store.beginRun({})
+  const outcome = store.finishRun(context, [await store.runCompany(context, 'COSCI')])
+  try {
+    reviewFixtureStore.addReviewItems(outcome.reviewQueue)
+    const target = outcome.reviewQueue[0]
+    reviewFixtureStore.apply({
+      reviewId: target.reviewId,
+      decision: 'APPROVED',
+      reviewerId: 'reviewer-15a',
+      decidedAt: REQUESTED_AT,
+      reason: 'Verified against the live listing.',
+    })
+    const runIds = new Set(outcome.reviewQueue.map((item) => item.reviewId))
+    const supplied = reviewFixtureStore.suppliedItems().filter((item) => runIds.has(item.reviewId))
+    assert.equal(
+      supplied.filter((item) => item.reviewStatus === 'NEEDS_REVIEW').length,
+      1,
+    )
+    assert.equal(
+      supplied.filter((item) => item.reviewStatus === 'APPROVED').length,
+      1,
+    )
+    const detail = resolveReviewItem(target.reviewId, undefined)
+    assert.ok(detail !== undefined && detail !== null)
+    assert.equal(detail.reviewStatus, 'APPROVED')
+    assert.equal(detail.candidateId, target.candidateId)
+    assert.equal(detail.audit.length, 1)
+  } finally {
+    reviewFixtureStore.reset()
+  }
+})
+
+test('Phase 15A: a historical run keeps its selection after later runs', async () => {
+  const store = createLiveGrantsGovDiscovery({ bridge: capturingBridge(undefined, OPEN_HITS), requestedAt: REQUESTED_AT })
+  const first = store.beginRun({ keyword: 'solar' })
+  const firstOutcome = store.finishRun(first, [await store.runCompany(first, 'COSCI')])
+  const second = store.beginRun({ keyword: 'wind' })
+  const secondOutcome = store.finishRun(second, [await store.runCompany(second, 'DedicateusIT')])
+  assert.deepEqual(firstOutcome.companyIds, ['COSCI'])
+  assert.equal(firstOutcome.keyword, 'solar')
+  assert.deepEqual(secondOutcome.companyIds, ['DedicateusIT'])
+  assert.equal(secondOutcome.keyword, 'wind')
+  assert.deepEqual(store.history().map((run) => run.runId), [firstOutcome.runId, secondOutcome.runId])
 })

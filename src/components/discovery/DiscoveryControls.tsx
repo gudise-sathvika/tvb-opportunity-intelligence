@@ -10,6 +10,7 @@ import { DOMAIN_OPTIONS, SCENARIO_LABEL, SCENARIO_OPTIONS } from './labels'
 interface DiscoveryControlsProps {
   selectedCount: number
   running: boolean
+  demo: boolean
   domain: DiscoveryDomain
   scenario: DiscoveryFixtureScenario
   sector: DiscoverySector
@@ -39,6 +40,7 @@ interface DiscoveryControlsProps {
 export default function DiscoveryControls({
   selectedCount,
   running,
+  demo,
   domain,
   scenario,
   sector,
@@ -91,28 +93,34 @@ export default function DiscoveryControls({
         <p className="dg-instruction">Select at least one company to enable a discovery run.</p>
       ) : (
         <p className="dg-instruction">
-          {selectedCount} {selectedCount === 1 ? 'company is' : 'companies are'} selected. Pick a scenario for a
-          fixture run, or run a live source search.
+          {selectedCount} {selectedCount === 1 ? 'company is' : 'companies are'} selected.{' '}
+          {demo
+            ? 'Pick a scenario for a fixture run, or run a live source search.'
+            : 'Run a live source search below.'}
         </p>
       )}
 
       <div className="dg-actions" role="group" aria-label="Start discovery">
-        <button
-          type="button"
-          className={domain === 'funding' ? 'btn dg-run--primary' : 'btn'}
-          disabled={!canRun}
-          onClick={() => onRun('funding')}
-        >
-          Run Grant Discovery
-        </button>
-        <button
-          type="button"
-          className={domain === 'procurement' ? 'btn dg-run--primary' : 'btn'}
-          disabled={!canRun}
-          onClick={() => onRun('procurement')}
-        >
-          Run RFP Discovery
-        </button>
+        {demo ? (
+          <>
+            <button
+              type="button"
+              className={domain === 'funding' ? 'btn dg-run--primary' : 'btn'}
+              disabled={!canRun}
+              onClick={() => onRun('funding')}
+            >
+              Run Grant Discovery
+            </button>
+            <button
+              type="button"
+              className={domain === 'procurement' ? 'btn dg-run--primary' : 'btn'}
+              disabled={!canRun}
+              onClick={() => onRun('procurement')}
+            >
+              Run RFP Discovery
+            </button>
+          </>
+        ) : null}
         <button
           type="button"
           className="btn dg-run--live"
@@ -138,8 +146,13 @@ export default function DiscoveryControls({
           Run Live TED Search
         </button>
       </div>
+      {!demo ? (
+        <p className="dg-instruction" data-testid="discovery-demo-hint">
+          Demonstration fixture scenarios are available only in demo mode.
+        </p>
+      ) : null}
       <p className="dg-scenario-note">
-        Live Funding Search sends one real read-only request per selected company to Grants.gov
+        Live Funding Search sends one real read-only request per run to Grants.gov
         (api.grants.gov), the official public US federal grants portal, and returns grant
         <strong> opportunities</strong>. With no keyword it runs a broad search of <strong>posted</strong> opportunities
         (not the company name); with a keyword it uses that keyword. A record is marked Open (confirmed)
@@ -154,36 +167,41 @@ export default function DiscoveryControls({
       </p>
       <p className="dg-scenario-note">
         Live TED Search sends one real read-only request to the EU Tenders Electronic Daily source per selected
-        company.
+        company when a keyword is entered (without one, TED is skipped as insufficiently specified),
+        plus one broad latest-notices request to the UK Find a Tender Service per run (shared by all
+        selected companies, never company-matched).
       </p>
       <p className="dg-scenario-note dg-scope-note" role="note">
         {keyword.trim() === ''
-          ? 'No keyword entered: Live TED uses each company’s own name as its search term; Live Funding (Grants.gov) runs a broad search of posted opportunities instead.'
-          : `Keyword “${keyword.trim()}” is used as the search term for every selected company instead of the company name.`}{' '}
+          ? 'No keyword entered: Live TED does not run — a company name is not a procurement search term — while the broad UK Find a Tender search still runs for the whole run; Live Funding (Grants.gov) runs a broad search of posted opportunities instead.'
+          : `Keyword “${keyword.trim()}” is used as the TED title search term for every selected company.`}{' '}
         Live TED matches tender titles only — not buyer names, supplier names, or every tender field. Live Funding
         (Grants.gov) matches federal grant-opportunity records.
       </p>
 
-      <fieldset className="dg-fieldset">
-        <legend className="dg-legend">Scenario</legend>
-        <div className="dg-options">
-          {SCENARIO_OPTIONS.map((option) => (
-            <label key={option.key} className="dg-option">
-              <input
-                type="radio"
-                name="dg-scenario"
-                value={option.key}
-                checked={scenario === option.key}
-                onChange={() => onScenarioChange(option.key)}
-              />
-              {option.label}
-            </label>
-          ))}
-        </div>
-        <p className="dg-scenario-note">
-          Scenario {SCENARIO_LABEL[scenario]} runs the local source adapter — never a live source.
-        </p>
-      </fieldset>
+      {demo ? (
+        <fieldset className="dg-fieldset">
+          <legend className="dg-legend">Scenario (demo only)</legend>
+          <div className="dg-options">
+            {SCENARIO_OPTIONS.map((option) => (
+              <label key={option.key} className="dg-option">
+                <input
+                  type="radio"
+                  name="dg-scenario"
+                  value={option.key}
+                  checked={scenario === option.key}
+                  onChange={() => onScenarioChange(option.key)}
+                />
+                {option.label}
+              </label>
+            ))}
+          </div>
+          <p className="dg-scenario-note">
+            Scenario {SCENARIO_LABEL[scenario]} runs the local source adapter — demonstration data, never a
+            live source.
+          </p>
+        </fieldset>
+      ) : null}
     </section>
   )
 }

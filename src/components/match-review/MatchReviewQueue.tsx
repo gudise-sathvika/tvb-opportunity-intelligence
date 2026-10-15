@@ -8,6 +8,7 @@ import {
   resolveMatchReviewSource,
 } from '../../automation/match-review-source'
 import { MatchReviewStatusBadge } from './MatchReviewStatusBadge'
+import LiveMatchCheck from './LiveMatchCheck'
 import {
   MATCH_REVIEW_FILTERS,
   MATCH_SIGNAL_LABEL,
@@ -63,6 +64,14 @@ export default function MatchReviewQueue() {
         </div>
       ) : null}
 
+      {!source.demo ? <LiveMatchCheck /> : null}
+
+      <h2 className="dg-subtitle">Persisted proposal review</h2>
+      <p className="dg-note" role="note">
+        The saved proposal queue below is derived from the application&apos;s persisted data
+        source — live check results above never enter it automatically.
+      </p>
+
       <div className="statgrid review-stats" role="group" aria-label="Match review summary">
         {MATCH_REVIEW_FILTERS.filter((f) => f.status !== null).map((f) => (
           <div key={f.slug} className="stat">
@@ -86,12 +95,16 @@ export default function MatchReviewQueue() {
 
       {visible.length === 0 && !source.demo ? (
         <div className="empty" data-testid="match-review-empty">
-          <p className="empty__headline">No real match proposals yet</p>
+          <p className="empty__headline">No persisted match proposals are awaiting review</p>
           <p className="empty__body">
-            A real proposal needs a genuine company record and a genuine opportunity record with
-            available provenance, plus matching evidence to evaluate. The imported snapshot holds
-            no company records, so no real proposals can be generated. Fixtures are never
-            substituted here.
+            This saved queue is empty: its data source currently holds no proposals to
+            review. A persisted proposal would require a verified company profile
+            (directory names alone are never sufficient — verification today means an
+            active GLEIF LEI record) and a genuine opportunity record with available
+            provenance. Temporary live evaluations from the check above never enter this
+            queue automatically, so their presence above never contradicts this empty
+            state. Country compatibility or keyword overlap alone never establishes
+            eligibility, and fixtures are never substituted here.
           </p>
         </div>
       ) : visible.length === 0 ? (

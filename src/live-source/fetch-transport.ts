@@ -13,14 +13,25 @@
  * as received; interpreting it is the adapter's job.
  */
 
-import type { TedTransport } from '../automation/ted-adapter'
+export interface FetchTransportInit {
+  readonly method: 'GET' | 'POST'
+  readonly headers: Readonly<Record<string, string>>
+  readonly body?: string
+}
+
+export interface FetchTransportResponse {
+  readonly status: number
+  readonly body: string
+}
+
+export type FetchTransport = (url: string, init: FetchTransportInit) => Promise<FetchTransportResponse>
 
 export interface FetchTransportOptions {
   /** Hard per-request timeout. One bounded attempt; never retried. */
   readonly timeoutMs?: number
 }
 
-export function createFetchTransport(options: FetchTransportOptions = {}): TedTransport {
+export function createFetchTransport(options: FetchTransportOptions = {}): FetchTransport {
   const timeoutMs = options.timeoutMs ?? 20_000
   return (url, init) => {
     const response = globalThis.fetch(url, {

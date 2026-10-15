@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import type { DiscoveryCandidate } from '../../automation/candidate'
 import type { DiscoveryRunOutcome } from '../../automation/discovery-fixture'
 import type { SourceRunResult } from '../../automation/orchestrator'
@@ -65,6 +66,13 @@ function SourceDetail({ companyId, result }: { companyId: string; result: Source
           ))}
         </ul>
       ) : null}
+      {result.warnings.length > 0 ? (
+        <ul className="dg-agent__warnings">
+          {result.warnings.map((warning, index) => (
+            <li key={`${result.sourceId}:w${index}`}>{warning}</li>
+          ))}
+        </ul>
+      ) : null}
     </li>
   )
 }
@@ -96,7 +104,9 @@ export default function AutomationWorkflow({ outcome }: { outcome: DiscoveryRunO
       <h2 className="dg-panel__title">Automation workflow</h2>
       <p className="dg-workflow__note">
         Automation does not directly create Vault records. Candidates pass through discovery,
-        classification, deduplication, and human review before any future write.
+        classification, deduplication, and human review before any future write. A run marked
+        Completed finished source discovery and classification; Company Matching below never
+        runs as part of a discovery run.
       </p>
 
       <h3 className="dg-subtitle">Requested</h3>
@@ -121,7 +131,17 @@ export default function AutomationWorkflow({ outcome }: { outcome: DiscoveryRunO
           {outcome.counts.blockedSources > 0 ? <li>Blocked sources: {outcome.counts.blockedSources}</li> : null}
           {outcome.counts.failedSources > 0 ? <li>Failed sources: {outcome.counts.failedSources}</li> : null}
         </ul>
-        <details className="dg-agent__detail">
+        {outcome.counts.candidatesReceived === 0 &&
+        outcome.counts.blockedSources === 0 &&
+        outcome.counts.failedSources === 0 ? (
+          <p className="dg-note" role="note">
+            All {outcome.counts.totalSources} source search{outcome.counts.totalSources === 1 ? '' : 'es'} completed
+            successfully but returned no records. This is a real empty answer, not a failure: per-company TED searches match
+            tender titles only, so a company name with no EU tender title match yields zero rows. Try a keyword
+            (e.g. “software”) or check the per-source detail below.
+          </p>
+        ) : null}
+        <details className="dg-agent__detail" open={outcome.counts.candidatesReceived === 0}>
           <summary>Show source detail</summary>
           <ul className="dg-agent__list">
             {outcome.companies.map((company) =>
@@ -194,9 +214,18 @@ export default function AutomationWorkflow({ outcome }: { outcome: DiscoveryRunO
           <AgentStatus done={false} runLabel="Completed" idleLabel="Not run" />
         </p>
         <ul className="dg-agent__stats">
-          <li>Not run &mdash; matching is a later phase.</li>
-          <li>Not implemented in this phase.</li>
-          <li>Runs after approved candidates are available.</li>
+          <li>Not run &mdash; discovery runs never invoke matching automatically.</li>
+          <li>
+            Matching needs both approved actionable candidates and verified company profiles
+            (active GLEIF LEI records). This run produced {outcome.needsReview} needing review.
+          </li>
+          <li>
+            <Link to={`/review?run=${encodeURIComponent(outcome.runId)}`}>
+              Review candidates for this run
+            </Link>{' '}
+            before anything can match, or try an on-demand live check from{' '}
+            <Link to="/match-review">Match Review</Link>. Nothing here is approved.
+          </li>
         </ul>
       </div>
     </section>

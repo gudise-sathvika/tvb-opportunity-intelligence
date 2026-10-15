@@ -17,7 +17,7 @@
     "test:data": "tsx --test src/data/selectors.test.ts src/data/procurement.test.ts src/data/documents.test.ts src/data/funding-filters.test.ts src/data/bootstrap.test.ts src/analytics/dashboard.test.ts src/import/schema-validation.test.ts src/import/bid-validation.test.ts src/import/bid-gates.test.ts src/import/contract-validation.test.ts src/import/contract-gates.test.ts src/import/procurement-match.test.ts",
     "pretest:data": "node scripts/ensure-snapshot.mjs",
     "test:automation": "tsx --test src/automation/*.test.ts",
-    "test:live": "tsx --test src/live-source/*.test.ts src/live-source/ted-bridge/*.test.ts src/live-source/usaspending-bridge/*.test.ts src/live-source/grantsgov-bridge/*.test.ts src/live-source/eu-sedia-bridge/*.test.ts server/*.test.ts",
+    "test:live": "tsx --test src/live-source/*.test.ts src/live-source/ted-bridge/*.test.ts src/live-source/usaspending-bridge/*.test.ts src/live-source/grantsgov-bridge/*.test.ts src/live-source/eu-sedia-bridge/*.test.ts src/live-source/fts-bridge/*.test.ts src/live-source/gleif-bridge/*.test.ts src/live-source/sec-bridge/*.test.ts server/*.test.ts",
     "test:vault": "tsx --test src/vault-writer/*.test.ts src/vault-bridge/*.test.ts",
     "import:data": "tsx src/import/cli.ts",
     "test:qa": "playwright test --config playwright.config.ts",

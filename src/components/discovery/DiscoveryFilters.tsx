@@ -64,7 +64,7 @@ export default function DiscoveryFilters({
             onChange={(event) => onKeywordChange(event.target.value)}
           />
           <p id="dg-keyword-hint" className="dg-filter__hint">
-            Live searches send this term to the source. Leave it blank and Live TED searches each company&rsquo;s name; Live Funding runs a broad posted-opportunity search.
+            Live searches send this term to the source. Leave it blank and Live TED is skipped as insufficiently specified (the broad Find a Tender search still runs); Live Funding runs a broad posted-opportunity search.
           </p>
         </div>
         <div className="dg-filter">

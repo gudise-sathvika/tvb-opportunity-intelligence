@@ -10,6 +10,14 @@
  * the Phase E review handoff are therefore the exact production code path —
  * nothing here reimplements discovery.
  *
+ * Phase 03A: when an FTS bridge is provided, the same run ALSO issues one
+ * broad latest-notices search to the UK Find a Tender Service (shared by all
+ * selected companies, never company-matched) through the same-origin
+ * fts-bridge, bound to the real FTS adapter. This keeps procurement runs
+ * honest when the company-name TED title search legitimately returns nothing:
+ * both sources' outcomes, counts, errors, and warnings stay visible
+ * separately, and the shared classifier gates every record.
+ *
  * The ONE live network call happens server-side in `ted-bridge/handler.ts`
  * (`createFetchTransport`). This browser module talks only to the same-origin
  * bridge via plain `fetch`, and can never reach the source directly (it offers
@@ -35,14 +43,18 @@ import { deriveRunOutcome, orchestrateDiscoveryRun } from '../automation/orchest
 import type { DiscoveryRunCounts, DiscoveryRunDependencies, DiscoveryRunInput, SourceRunResult } from '../automation/orchestrator'
 import type { SourceAdapter } from '../automation/adapter'
 import type { SourceRegistry } from '../automation/registry'
-import { DEFAULT_SOURCE_REGISTRY, TED_SOURCE_ID } from '../automation/registry'
+import { DEFAULT_SOURCE_REGISTRY, FTS_SOURCE_ID, TED_SOURCE_ID, createSourceRegistry } from '../automation/registry'
 import { reviewFixtureStore } from '../automation/review-fixture'
 import { createReviewQueue, reviewStatusForCandidate } from '../automation/review-queue'
 import { partitionByActionability } from '../automation/opportunity-status'
 import { createTedAdapter } from '../automation/ted-adapter'
 import type { TedTransport } from '../automation/ted-adapter'
+import { createFtsAdapter } from '../automation/fts-adapter'
+import type { FtsTransport } from '../automation/fts-adapter'
 import { TED_BRIDGE_SEARCH_PATH } from './ted-bridge/contract'
 import type { TedBridgeSearchRequest, TedBridgeSearchResponse } from './ted-bridge/contract'
+import { FTS_BRIDGE_SEARCH_PATH } from './fts-bridge/contract'
+import type { FtsBridgeSearchRequest, FtsBridgeSearchResponse } from './fts-bridge/contract'
 
 export const TED_LIVE_RUN_ID_PREFIX = 'RUN-T'
 export const TED_LIVE_PROFILE_ID = 'DP-LIVE-001'
@@ -92,6 +104,83 @@ export function defaultTedBridgeClient(): TedBridgeClient {
   }
 }
 
+/**
+ * Phase 04 shared-pool handoff rule. Candidates from the broad, non-keyworded
+ * FTS feed are byte-identical for every company in the run (same notice,
+ * same candidateId `DC:{sourceId}:{recordId}`), so without this step the same
+ * notice would enter the review queue once per company
+ * (`RI:…:NORMALIZED`, `…#1`, `…#2`, …). The first occurrence is canonical;
+ * later ones are the same notice, not new evidence, and are withheld from the
+ * handoff. The canonical item is attributed to the shared pool — a broad
+ * notice is unassigned, never company-matched. Company-directed (TED)
+ * candidates pass through untouched, as do the per-company display lists.
+ * Exported for tests.
+ */
+export function dedupeHandoffCandidates(
+  candidates: readonly DiscoveryCandidate[],
+  poolSourceIds: readonly string[] = [FTS_SOURCE_ID],
+  poolCompanyId: string = FTS_LIVE_POOL_COMPANY_ID,
+): DiscoveryCandidate[] {
+  const seen = new Set<string>()
+  const handoff: DiscoveryCandidate[] = []
+  for (const candidate of candidates) {
+    if (!poolSourceIds.includes(candidate.sourceId)) {
+      handoff.push(candidate)
+      continue
+    }
+    if (seen.has(candidate.candidateId)) continue
+    seen.add(candidate.candidateId)
+    handoff.push(
+      deepFreeze({
+        ...candidate,
+        companyId: poolCompanyId,
+        provenance: { ...candidate.provenance, companyId: poolCompanyId },
+      }),
+    )
+  }
+  return handoff
+}
+
+/** Async same-origin FTS bridge client; injectable for tests. */
+export type FtsBridgeClient = (request: FtsBridgeSearchRequest) => Promise<FtsBridgeSearchResponse>
+
+export function defaultFtsBridgeClient(): FtsBridgeClient {
+  return async (request) => {
+    const response = await globalThis.fetch(FTS_BRIDGE_SEARCH_PATH, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(request),
+    })
+    return (await response.json()) as FtsBridgeSearchResponse
+  }
+}
+
+/**
+ * Run-level `companyId` carried on the single shared FTS bridge request. The
+ * FTS feed has no keyword search — every run fetches the same latest
+ * notices — so this marker, not any company's id, is sent. It never implies
+ * the results belong to a company.
+ */
+export const FTS_LIVE_POOL_COMPANY_ID = 'RUN'
+
+/**
+ * Builds the run-scoped registry view used when the run includes the UK Find
+ * a Tender Service: identical to the base registry, except `SU-FTS-001` is
+ * presented as AVAILABLE for that run, because the mounted, fixed-endpoint,
+ * no-auth same-origin FTS bridge IS the read-only access path. The
+ * base/global registry (and `DEFAULT_SOURCE_REGISTRY`) is never mutated.
+ * Exported for tests.
+ */
+export function tedFtsLiveRegistry(base: SourceRegistry = DEFAULT_SOURCE_REGISTRY): SourceRegistry {
+  return createSourceRegistry(
+    base.definitions.map((definition) =>
+      definition.sourceId === FTS_SOURCE_ID
+        ? { ...definition, accessState: 'AVAILABLE' as const }
+        : definition,
+    ),
+  )
+}
+
 function nowIso(): string {
   return new Date().toISOString()
 }
@@ -134,12 +223,22 @@ function matchesKeyword(candidate: DiscoveryCandidate, keyword: string): boolean
  */
 export function createLiveTedDiscovery(options: {
   readonly bridge: TedBridgeClient
+  /** Optional FTS bridge. When provided, the run also queries the UK Find a
+   * Tender Service (one broad latest-notices search per run, shared by every
+   * selected company); when absent, the run is TED-only, exactly as before. */
+  readonly ftsBridge?: FtsBridgeClient
   readonly registry?: SourceRegistry
   readonly requestedAt?: string
 }): LiveTedDiscoveryStore {
-  const registry = options.registry ?? DEFAULT_SOURCE_REGISTRY
+  const registry = options.ftsBridge !== undefined ? tedFtsLiveRegistry(options.registry ?? DEFAULT_SOURCE_REGISTRY) : (options.registry ?? DEFAULT_SOURCE_REGISTRY)
   let runCounter = 0
   let historyState: readonly DiscoveryRunOutcome[] = deepFreeze([])
+  /**
+   * Phase 03A: one in-flight/resolved FTS bridge response per run. The FTS
+   * feed has no keyword search, so `runCompany` awaits the SAME promise for
+   * every selected company and a run issues exactly one FTS search.
+   */
+  const ftsRunResponses = new Map<string, Promise<FtsBridgeSearchResponse>>()
 
   function nextRunId(): string {
     runCounter += 1
@@ -166,28 +265,82 @@ export function createLiveTedDiscovery(options: {
     }
   }
 
-  function dependenciesFor(adapter: SourceAdapter): DiscoveryRunDependencies {
-    return { registry, adapters: Object.freeze({ [TED_SOURCE_ID]: adapter }) }
+  function dependenciesFor(tedAdapter: SourceAdapter | undefined, ftsAdapter?: SourceAdapter): DiscoveryRunDependencies {
+    const adapters: Record<string, SourceAdapter> = {}
+    if (tedAdapter !== undefined) adapters[TED_SOURCE_ID] = tedAdapter
+    if (ftsAdapter !== undefined) adapters[FTS_SOURCE_ID] = ftsAdapter
+    return { registry, adapters: Object.freeze(adapters) }
   }
 
-  function searchTermFor(context: LiveTedRunContext, companyId: string): string {
-    return context.keyword !== '' ? context.keyword : companyId
+  function ftsTransportFor(response: FtsBridgeSearchResponse): FtsTransport {
+    return () => {
+      if (!response.ok) {
+        throw new Error(response.errors.map((error) => error.message).join('; '))
+      }
+      return { status: response.status, body: response.body }
+    }
+  }
+
+  /**
+   * Returns the run's single FTS response, issuing the bridge request on
+   * first use and reusing it for every later company in the same run. A
+   * transport throw becomes a REAL failure response (never an empty success).
+   */
+  function sharedFtsResponseFor(context: LiveTedRunContext): Promise<FtsBridgeSearchResponse> {
+    const cached = ftsRunResponses.get(context.runId)
+    if (cached !== undefined) return cached
+    const bridgeRequest: FtsBridgeSearchRequest = {
+      runId: context.runId,
+      companyId: FTS_LIVE_POOL_COMPANY_ID,
+      limit: context.limit,
+      requestedAt: context.requestedAt,
+    }
+    const bridge = options.ftsBridge ?? defaultFtsBridgeClient()
+    const request = Promise.resolve()
+      .then(() => bridge(bridgeRequest))
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error)
+        const failure: FtsBridgeSearchResponse = {
+          ok: false,
+          status: 0,
+          body: null,
+          errors: [{ code: 'bridge_failure', message: `live Find a Tender search failed: ${message}` }],
+        }
+        return failure
+      })
+    ftsRunResponses.set(context.runId, request)
+    return request
+  }
+
+  /**
+   * Phase 34: the TED search term is the explicit keyword or nothing at all.
+   * A company/supplier name is NEVER substituted: tender titles rarely contain
+   * it, so the fallback manufactured confident-looking zero-result searches
+   * (RUN-T-0001: `notice-title~"CapitalstackAI"` → 0 rows, HTTP 200). A null
+   * term means TED cannot run for this company; the keyword-independent FTS
+   * feed still runs.
+   */
+  function searchTermFor(context: LiveTedRunContext): string | null {
+    return context.keyword !== '' ? context.keyword : null
   }
 
   function inputFor(context: LiveTedRunContext, companyId: string): DiscoveryRunInput {
     const adapterConfig: Record<string, unknown> = { limit: context.limit }
     if (context.publishedSince !== '') adapterConfig.publishedSince = context.publishedSince
+    const term = searchTermFor(context)
+    const useTed = term !== null
+    const useFts = options.ftsBridge !== undefined
     return {
       runId: `${context.runId}-${companyId}`,
       companyId,
       discoveryProfileId: TED_LIVE_PROFILE_ID,
       domain: context.domain,
       requestedAt: context.requestedAt,
-      sourceIds: [TED_SOURCE_ID],
-      queryTerms: [searchTermFor(context, companyId)],
+      sourceIds: [...(useTed ? [TED_SOURCE_ID] : []), ...(useFts ? [FTS_SOURCE_ID] : [])],
+      queryTerms: [term ?? '*'],
       exclusions: [],
       sector: context.sector,
-      keyword: searchTermFor(context, companyId),
+      keyword: term ?? '',
       location: context.location,
       adapterConfig,
     }
@@ -253,32 +406,51 @@ export function createLiveTedDiscovery(options: {
         throw new Error('company id must not be blank')
       }
       const cleaned = companyId.trim()
-
-      const bridgeRequest: TedBridgeSearchRequest = {
-        runId: context.runId,
-        companyId: cleaned,
-        keyword: searchTermFor(context, cleaned),
-        publishedSince: context.publishedSince,
-        limit: context.limit,
-        requestedAt: context.requestedAt,
+      const term = searchTermFor(context)
+      if (term === null && options.ftsBridge === undefined) {
+        throw new Error(
+          'Live TED needs an explicit procurement keyword: without one there is no honest TED query to run',
+        )
       }
 
-      let response: TedBridgeSearchResponse
-      try {
-        response = await options.bridge(bridgeRequest)
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        response = {
-          ok: false,
-          status: 0,
-          body: null,
-          errors: [{ code: 'bridge_failure', message: `live TED search failed: ${message}` }],
+      // Phase 34: no TED bridge call without an explicit term. A blank keyword
+      // means TED does not run for this company (insufficiently specified),
+      // while the keyword-independent FTS feed still runs below.
+      let tedAdapter: SourceAdapter | undefined
+      if (term !== null) {
+        const bridgeRequest: TedBridgeSearchRequest = {
+          runId: context.runId,
+          companyId: cleaned,
+          keyword: term,
+          publishedSince: context.publishedSince,
+          limit: context.limit,
+          requestedAt: context.requestedAt,
         }
-      }
 
-      const adapter = createTedAdapter({ transport: transportFor(response), registry })
+        let response: TedBridgeSearchResponse
+        try {
+          response = await options.bridge(bridgeRequest)
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          response = {
+            ok: false,
+            status: 0,
+            body: null,
+            errors: [{ code: 'bridge_failure', message: `live TED search failed: ${message}` }],
+          }
+        }
+        tedAdapter = createTedAdapter({ transport: transportFor(response), registry })
+      }
       const input = inputFor(context, cleaned)
-      const result = orchestrateDiscoveryRun(input, dependenciesFor(adapter))
+      let ftsAdapter: SourceAdapter | undefined
+      if (options.ftsBridge !== undefined) {
+        // Phase 03A: one broad FTS latest-notices search per run, replayed for
+        // every selected company. The FTS feed has no keyword search, so its
+        // candidates are real latest UK notices, never company-matched.
+        const ftsResponse = await sharedFtsResponseFor(context)
+        ftsAdapter = createFtsAdapter({ transport: ftsTransportFor(ftsResponse), registry })
+      }
+      const result = orchestrateDiscoveryRun(input, dependenciesFor(tedAdapter, ftsAdapter))
       const candidates = result.candidates.filter((candidate) => matchesKeyword(candidate, context.keyword))
       // Phase 23 ingest gate: only records the shared classifier marks `open`
       // may enter the actionable pool. Everything else is preserved as
@@ -329,7 +501,11 @@ export function createLiveTedDiscovery(options: {
         allCandidates.push(...company.candidates)
       }
 
-      const reviewQueue = createReviewQueue(allCandidates, { createdAt: context.requestedAt })
+      // Phase 04: the handoff is deduped across companies (shared broad FTS
+      // notices yield one canonical unassigned item, not one per company).
+      // Per-company display lists above are untouched.
+      const reviewQueue = createReviewQueue(dedupeHandoffCandidates(allCandidates), { createdAt: context.requestedAt })
+      ftsRunResponses.delete(context.runId)
       // Review handoff: the live run's candidates enter the real Phase E queue
       // backing the Human review page, exactly like fixture runs.
       reviewFixtureStore.addReviewItems(reviewQueue)
@@ -360,8 +536,12 @@ export function createLiveTedDiscovery(options: {
     reset(): void {
       historyState = deepFreeze([])
       runCounter = 0
+      ftsRunResponses.clear()
     },
   }
 }
 
-export const liveDiscoveryStore = createLiveTedDiscovery({ bridge: defaultTedBridgeClient() })
+export const liveDiscoveryStore = createLiveTedDiscovery({
+  bridge: defaultTedBridgeClient(),
+  ftsBridge: defaultFtsBridgeClient(),
+})

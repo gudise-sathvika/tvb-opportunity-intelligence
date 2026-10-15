@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import type { DiscoveryDomain } from '../automation/types'
 import { discoveryFixtureStore } from '../automation/discovery-fixture'
+import { DISCOVERY_DEMO_PARAM, resolveDiscoverySource } from '../automation/discovery-source'
 import type {
   DiscoveryFixtureScenario,
   DiscoveryLocation,
@@ -8,6 +10,7 @@ import type {
   DiscoverySector,
 } from '../automation/discovery-fixture'
 import { liveDiscoveryStore } from '../live-source/live-discovery'
+import { persistRunOutcome } from '../live-source/persisted-runs'
 import { liveUsaSpendingDiscoveryStore } from '../live-source/live-funding-discovery'
 import { liveGrantsGovDiscoveryStore } from '../live-source/live-grantsgov-discovery'
 import { liveEuSediaDiscoveryStore } from '../live-source/live-eu-sedia-discovery'
@@ -24,6 +27,8 @@ type CompanyProgress = {
 }
 
 export default function Discovery() {
+  const [params] = useSearchParams()
+  const source = resolveDiscoverySource(params.get(DISCOVERY_DEMO_PARAM))
   const companies = useMemo(() => [...COMPANY_DIRECTORY_NAMES], [])
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [domain, setDomain] = useState<DiscoveryDomain>('funding')
@@ -58,6 +63,10 @@ export default function Discovery() {
   const clearSelection = () => setSelected(new Set())
 
   async function runDiscovery(runDomain: DiscoveryDomain) {
+    if (!source.demo) {
+      setRunError('Fixture scenarios are available only in demo mode.')
+      return
+    }
     if (selected.size === 0 || running) return
 
     const selectedNames = [...selected]
@@ -95,6 +104,7 @@ export default function Discovery() {
       }
 
       const completed = discoveryFixtureStore.finishRun(context, companyResults)
+      persistRunOutcome(completed)
       setOutcome(completed)
       setHistory([
         ...liveEuSediaDiscoveryStore.history(),
@@ -142,6 +152,7 @@ export default function Discovery() {
       }
 
       const completed = liveDiscoveryStore.finishRun(context, companyResults)
+      persistRunOutcome(completed)
       setOutcome(completed)
       setHistory([
         ...liveEuSediaDiscoveryStore.history(),
@@ -190,6 +201,7 @@ export default function Discovery() {
       }
 
       const completed = liveGrantsGovDiscoveryStore.finishRun(context, companyResults)
+      persistRunOutcome(completed)
       setOutcome(completed)
       setHistory([
         ...liveEuSediaDiscoveryStore.history(),
@@ -238,6 +250,7 @@ export default function Discovery() {
       }
 
       const completed = liveEuSediaDiscoveryStore.finishRun(context, companyResults)
+      persistRunOutcome(completed)
       setOutcome(completed)
       setHistory([
         ...liveEuSediaDiscoveryStore.history(),
@@ -267,6 +280,7 @@ export default function Discovery() {
         <CompanySelector
           companies={companies}
           selected={selected}
+          demo={source.demo}
           onToggle={toggle}
           onSelectAllVisible={selectAllVisible}
           onClear={clearSelection}
@@ -274,6 +288,7 @@ export default function Discovery() {
         <DiscoveryControls
           selectedCount={selected.size}
           running={running}
+          demo={source.demo}
           domain={domain}
           scenario={scenario}
           sector={sector}
@@ -291,9 +306,19 @@ export default function Discovery() {
         />
       </div>
 
-      <p className="dg-note dg-banner" role="note">
-        Scenario mode — runs against local source adapters
-      </p>
+      {source.demo ? (
+        <div className="mr-demo" role="note" data-testid="discovery-demo-banner">
+          <strong className="mr-demo__label">Demo mode.</strong> Fixture scenarios below use demonstration
+          records, not real discoveries. <Link to="/discovery">Leave demo mode</Link> to see only live
+          sources.
+        </div>
+      ) : null}
+
+      {source.demo ? (
+        <p className="dg-note dg-banner" role="note">
+          Scenario mode — runs against local source adapters
+        </p>
+      ) : null}
 
       {runError !== null ? (
         <p className="dg-empty" role="alert">

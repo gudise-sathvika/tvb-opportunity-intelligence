@@ -98,14 +98,16 @@ function barFor(pathname: string, search: string): Bar | null {
     }
   }
 
-  if (startsWith(pathname, '/discovery') || startsWith(pathname, '/review')) {
+  if (startsWith(pathname, '/discovery') || startsWith(pathname, '/review') || startsWith(pathname, '/history')) {
     return {
       key: 'workflow',
       title: 'Discovery workflow',
       ariaLabel: 'Discovery workflow',
       tabs: [
         { label: 'Source discovery', to: '/discovery', active: startsWith(pathname, '/discovery') },
-        { label: 'Human review', to: '/review', active: startsWith(pathname, '/review') },
+        { label: 'Human review', to: '/review', active: startsWith(pathname, '/review') && !startsWith(pathname, '/review/funding') && !startsWith(pathname, '/review/procurement') },
+        { label: 'Funding review', to: '/review/funding', active: startsWith(pathname, '/review/funding') },
+        { label: 'Procurement review', to: '/review/procurement', active: startsWith(pathname, '/review/procurement') },
         { label: 'Match review', to: '/match-review', active: false },
       ],
     }

@@ -25,6 +25,7 @@
 import type { DiscoveryCandidate } from './candidate'
 import {
   EU_SEDIA_SOURCE_ID,
+  FTS_SOURCE_ID,
   GRANTS_GOV_SOURCE_ID,
   TED_SOURCE_ID,
   USA_SPENDING_SOURCE_ID,
@@ -32,6 +33,7 @@ import {
 import { GRANTS_GOV_OPPORTUNITY_PREFIX } from './grantsgov-adapter'
 import { EU_OFFICIAL_URL_PREFIX } from './eu-sedia-gate'
 import { TED_NOTICE_DETAIL_PREFIX } from './ted-adapter'
+import { FTS_NOTICE_DETAIL_PREFIX } from './fts-adapter'
 
 export const OPPORTUNITY_STATE_RULE_VERSION = 'phase22-1'
 
@@ -139,8 +141,16 @@ export function classifyGrantsGovOpportunity(candidate: DiscoveryCandidate, now:
  */
 export function classifyEuOpportunityState(candidate: DiscoveryCandidate, now: string): OpportunityStatus {
   switch (candidate.sourceStatus) {
-    case 'forthcoming':
+    case 'forthcoming': {
+      // Phase 07A: a "forthcoming" record whose deadline has already passed is
+      // stale index data (observed live: 2023/2024 deadlines with forthcoming
+      // status) — it is expired, not forthcoming forever. Without a parseable
+      // deadline it stays forthcoming: a missing deadline alone never proves
+      // expiry.
+      const future = deadlineInFuture(candidate.sourceDeadline, now)
+      if (future === false) return { state: 'expired', reason: 'forthcoming status but the deadline has passed' }
       return { state: 'forthcoming', reason: 'forthcoming call, not yet open for submission' }
+    }
     case 'closed':
       return { state: 'closed', reason: 'source status is closed' }
     case 'open': {
@@ -197,6 +207,36 @@ export function classifyTedOpportunity(candidate: DiscoveryCandidate, now: strin
 }
 
 /**
+ * UK Find a Tender Service: an `active` tender with a future submission
+ * deadline and an official notice URL is an open competition; `planned` is
+ * forthcoming; `cancelled` and completed (`complete`, i.e. the award phase is
+ * done) are closed; an active tender with a past/missing deadline is
+ * expired/unknown; anything unrecognized is unknown, never open.
+ */
+export function classifyFtsOpportunity(candidate: DiscoveryCandidate, now: string): OpportunityStatus {
+  switch (candidate.sourceStatus) {
+    case 'planned':
+      return { state: 'forthcoming', reason: 'planned notice, not yet open for competition' }
+    case 'cancelled':
+      return { state: 'closed', reason: 'source status is cancelled' }
+    case 'complete':
+      return { state: 'historical', reason: 'completed tender record (award phase), not an open competition' }
+    case 'active': {
+      if (!hasOfficialUrl(candidate, FTS_NOTICE_DETAIL_PREFIX)) {
+        return { state: 'unknown', reason: 'no official Find a Tender notice URL' }
+      }
+      const future = deadlineInFuture(candidate.sourceDeadline, now)
+      if (future === null) return { state: 'unknown', reason: 'active tender without a parseable submission deadline' }
+      return future
+        ? { state: 'open', reason: 'active tender with a future submission deadline' }
+        : { state: 'expired', reason: 'active tender whose submission deadline has passed' }
+    }
+    default:
+      return { state: 'unknown', reason: `status is ${candidate.sourceStatus ?? 'missing'}, not active` }
+  }
+}
+
+/**
  * Dispatches to the source-specific rule. USAspending is always `historical`
  * (obligated award history, never an open solicitation); an unknown source id
  * is `unknown` (never open).
@@ -209,6 +249,8 @@ export function classifyOpportunityState(candidate: DiscoveryCandidate, now: str
       return classifyEuOpportunityState(candidate, now)
     case TED_SOURCE_ID:
       return classifyTedOpportunity(candidate, now)
+    case FTS_SOURCE_ID:
+      return classifyFtsOpportunity(candidate, now)
     case USA_SPENDING_SOURCE_ID:
       return { state: 'historical', reason: 'obligated federal award history, not an open solicitation' }
     default:

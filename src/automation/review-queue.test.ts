@@ -34,6 +34,7 @@ import {
   createReviewQueue,
   filterReviewItemsByRun,
   nextReviewStatuses,
+  paginateList,
   reviewIdFor,
   validateReviewDecision,
   type ReviewAuditEntry,
@@ -589,4 +590,52 @@ test('a needs-review item with possible-duplicate evidence stays reviewable', ()
 
   const approved = applyReviewDecision(item, decision(item, {}))
   assert.equal(approved.reviewStatus, 'APPROVED', 'the reviewer may resolve a needs-review item')
+})
+test('paginateList slices ten per page with clamping and no overlaps', () => {
+  // total, page -> [safePage, totalPages, start, end]
+  const cases: Array<[number, number, [number, number, number, number]]> = [
+    [0, 1, [1, 1, 0, 0]],
+    [1, 1, [1, 1, 0, 1]],
+    [10, 1, [1, 1, 0, 10]],
+    [11, 1, [1, 2, 0, 10]],
+    [11, 2, [2, 2, 10, 11]],
+    [20, 2, [2, 2, 10, 20]],
+    [21, 3, [3, 3, 20, 21]],
+    [47, 1, [1, 5, 0, 10]],
+    [47, 5, [5, 5, 40, 47]],
+    // A decision emptying the last page clamps back instead of stranding.
+    [47, 9, [5, 5, 40, 47]],
+    [47, 0, [1, 5, 0, 10]],
+    [47, -3, [1, 5, 0, 10]],
+  ]
+  for (const [total, page, expected] of cases) {
+    const slice = paginateList(total, page, 10)
+    assert.deepEqual([slice.safePage, slice.totalPages, slice.start, slice.end], expected, `total=${total} page=${page}`)
+  }
+  // Slices across all pages partition the list exactly once (47 items).
+  const seen: number[] = []
+  const totalPages = paginateList(47, 1, 10).totalPages
+  for (let page = 1; page <= totalPages; page += 1) {
+    const { start, end } = paginateList(47, page, 10)
+    for (let i = start; i < end; i += 1) seen.push(i)
+  }
+  assert.deepEqual(seen, Array.from({ length: 47 }, (_, i) => i))
+})
+
+test('review sections split every record exactly once by canonical domain', async () => {
+  const { reviewSectionFor } = await import('./review-queue')
+  assert.equal(reviewSectionFor('funding'), 'funding')
+  assert.equal(reviewSectionFor('procurement'), 'procurement')
+  assert.equal(reviewSectionFor(''), 'unclassified')
+  assert.equal(reviewSectionFor('grant'), 'unclassified')
+  // Fixture queue: funding and procurement items land in their own sections, nothing lost.
+  const { reviewFixtureStore } = await import('./review-fixture')
+  try {
+    const grouped: Record<string, number> = { funding: 0, procurement: 0, unclassified: 0 }
+    for (const item of reviewFixtureStore.items()) grouped[reviewSectionFor(item.domain)] += 1
+    assert.equal(grouped.funding + grouped.procurement + grouped.unclassified, reviewFixtureStore.items().length)
+    assert.ok(grouped.funding > 0 && grouped.procurement > 0)
+  } finally {
+    reviewFixtureStore.reset()
+  }
 })

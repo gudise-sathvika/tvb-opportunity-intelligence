@@ -101,6 +101,15 @@ export interface RawResult {
    * NOT an "is open" verdict and must not be used as one on its own.
    */
   sourceStatus?: string | null
+  /**
+   * Phase 07B link-validation status. Set only by adapters that can tell a
+   * source-supplied destination apart from a constructed one (currently EU
+   * SEDIA); absent everywhere else. `source-provided` = the source's own URL
+   * kept verbatim; `constructed-unverified` = built by the adapter from an
+   * identifier, route not source-confirmed; `confirmed-unavailable` = no
+   * destination (missing/malformed). An HTTP 200 alone never upgrades these.
+   */
+  linkValidation?: 'source-provided' | 'constructed-unverified' | 'confirmed-unavailable' | null
   rawPayload: string
   rawProvenance: RawResultProvenance
 }

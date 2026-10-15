@@ -213,3 +213,23 @@ test('deduplication attaches stage provenance to every candidate', () => {
     assert.ok(candidate.duplicate, 'every candidate leaves dedup with a verdict')
   }
 })
+test('candidate identity is source-scoped and stable, with documented hash fallbacks', async () => {
+  const { candidateIdFor } = await import('./candidate')
+  // Same notice, repeated retrieval: identical id, no position/time/company input.
+  assert.equal(
+    candidateIdFor({ sourceId: 'SU-FTS-001', sourceRecordId: 'ocds-h6vhtk-077a00', sourceUrl: 'https://www.find-tender.service.gov.uk/notice/ocds-h6vhtk-077a00', rawPayload: '{"a":1}' }),
+    'DC:SU-FTS-001:ocds-h6vhtk-077a00',
+  )
+  // Similar record ids under different sources never collide.
+  assert.notEqual(
+    candidateIdFor({ sourceId: 'SU-FTS-001', sourceRecordId: 'X-1', sourceUrl: 'https://u1.invalid', rawPayload: '{}' }),
+    candidateIdFor({ sourceId: 'SU-TED-001', sourceRecordId: 'X-1', sourceUrl: 'https://u1.invalid', rawPayload: '{}' }),
+  )
+  // Missing record id falls back to a stable URL hash (tier 2), then payload hash (tier 3).
+  const noIdUrl = candidateIdFor({ sourceId: 'SU-FTS-001', sourceRecordId: null, sourceUrl: 'https://u2.invalid/n', rawPayload: '{"b":2}' })
+  assert.ok(noIdUrl.startsWith('DC:SU-FTS-001:h'))
+  assert.equal(noIdUrl, candidateIdFor({ sourceId: 'SU-FTS-001', sourceRecordId: null, sourceUrl: 'https://u2.invalid/n', rawPayload: '{"different":true}' }))
+  const noIdNoUrl = candidateIdFor({ sourceId: 'SU-FTS-001', sourceRecordId: null, sourceUrl: '', rawPayload: '{"c":3}' })
+  assert.ok(noIdNoUrl.startsWith('DC:SU-FTS-001:h'))
+  assert.notEqual(noIdUrl, noIdNoUrl)
+})

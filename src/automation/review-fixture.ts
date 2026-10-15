@@ -670,7 +670,25 @@ export function buildInitialReviewItems(): readonly ReviewItem[] {
 }
 
 export interface ReviewFixtureStore {
+  /**
+   * Phase 31: change notifications for persistence adapters. Pure observer
+   * registry — the store itself performs no I/O; a subscriber (outside
+   * `src/automation`) may mirror state to durable storage. Returns an
+   * unsubscribe function. Listeners never affect store contents.
+   */
+  subscribe(listener: () => void): () => void
   items(): readonly ReviewItem[]
+  /**
+   * Only the demonstration seed items created by `buildInitialReviewItems()`.
+   * These are fixtures and must be shown only in explicit demo mode.
+   */
+  fixtureItems(): readonly ReviewItem[]
+  /**
+   * Only the review items SUPPLIED at runtime through `addReviewItems` (the
+   * Phase G discovery handoff, including live source runs). These are the
+   * genuine items a production queue may show by default.
+   */
+  suppliedItems(): readonly ReviewItem[]
   item(reviewId: string): ReviewItem | undefined
   apply(input: ReviewDecisionInput): ReviewItem
   /**
@@ -683,15 +701,42 @@ export interface ReviewFixtureStore {
   reset(): void
 }
 
-let state: readonly ReviewItem[] = buildInitialReviewItems()
+const INITIAL_FIXTURE_ITEMS: readonly ReviewItem[] = buildInitialReviewItems()
+/** The seed reviewIds, so fixture items stay distinguishable from supplied ones. */
+const FIXTURE_REVIEW_IDS: ReadonlySet<string> = new Set(INITIAL_FIXTURE_ITEMS.map((item) => item.reviewId))
+
+let state: readonly ReviewItem[] = INITIAL_FIXTURE_ITEMS
+const listeners = new Set<() => void>()
+
+function notify(): void {
+  for (const listener of [...listeners]) {
+    try {
+      listener()
+    } catch {
+      // A failing persistence adapter must never break review decisions.
+    }
+  }
+}
 
 /**
  * The local mock store. `apply` routes every decision through the real Phase E
  * `applyReviewDecision` — there is no second state machine in the UI.
  */
 export const reviewFixtureStore: ReviewFixtureStore = {
+  subscribe(listener: () => void): () => void {
+    listeners.add(listener)
+    return () => {
+      listeners.delete(listener)
+    }
+  },
   items(): readonly ReviewItem[] {
     return state
+  },
+  fixtureItems(): readonly ReviewItem[] {
+    return state.filter((item) => FIXTURE_REVIEW_IDS.has(item.reviewId))
+  },
+  suppliedItems(): readonly ReviewItem[] {
+    return state.filter((item) => !FIXTURE_REVIEW_IDS.has(item.reviewId))
   },
   item(reviewId: string): ReviewItem | undefined {
     return state.find((entry) => entry.reviewId === reviewId)
@@ -701,6 +746,7 @@ export const reviewFixtureStore: ReviewFixtureStore = {
     if (!current) throw new Error(`review item not found: ${input.reviewId}`)
     const updated = applyReviewDecision(current, input)
     state = deepFreeze(state.map((entry) => (entry.reviewId === updated.reviewId ? updated : entry)))
+    notify()
     return updated
   },
   addReviewItems(items: readonly ReviewItem[]): void {
@@ -714,8 +760,10 @@ export const reviewFixtureStore: ReviewFixtureStore = {
     const fresh = items.filter((item) => !existing.has(item.reviewId))
     if (fresh.length === 0) return
     state = deepFreeze([...state, ...fresh])
+    notify()
   },
   reset(): void {
-    state = buildInitialReviewItems()
+    state = INITIAL_FIXTURE_ITEMS
+    notify()
   },
 }

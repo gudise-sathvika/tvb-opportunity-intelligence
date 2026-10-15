@@ -203,3 +203,44 @@ test('candidateFromRawResult rejects an adapter result without a domain (never f
   const result = syntheticAdapterResult({ request, sourceName: 'x', adapterType: 'fixture' })
   assert.throws(() => candidateFromRawResult({ ...result, domain: null } as AdapterResult, raw), /without an adapter-result domain/)
 })
+test('Phase 07B: link validation flows from raw result to candidate, defaulting to null', async () => {
+  const { makeRaw, syntheticAdapterResult, fixtureRequest } = await import('./phase-c-fixtures')
+  const { FIXTURE_FUNDING_SOURCE_ID } = await import('./registry')
+  const request = fixtureRequest({ sourceId: FIXTURE_FUNDING_SOURCE_ID, domain: 'funding', runId: 'RUN-07B', requestedAt: '2026-10-14T00:00:00.000Z' })
+  const adapterResult = syntheticAdapterResult({
+    request,
+    sourceName: 'link validation fixture',
+    adapterType: 'fixture',
+    results: [
+      { ...makeRaw({ sourceUrl: 'https://fixture.invalid/a', title: 'Marked', sourceRecordId: 'A-1' }), linkValidation: 'constructed-unverified' },
+      makeRaw({ sourceUrl: 'https://fixture.invalid/b', title: 'Unmarked', sourceRecordId: 'B-2' }),
+    ],
+  })
+  const [marked, unmarked] = adapterResult.results.map((raw) => candidateFromRawResult(adapterResult, raw))
+  assert.equal(marked.sourceLinkValidation, 'constructed-unverified')
+  assert.equal(unmarked.sourceLinkValidation, null)
+})
+
+test('Phase 09: transform attaches opportunity evidence without changing identity', async () => {
+  const { makeRaw, syntheticAdapterResult, fixtureRequest } = await import('./phase-c-fixtures')
+  const { GRANTS_GOV_SOURCE_ID } = await import('./registry')
+  const request = fixtureRequest({ sourceId: GRANTS_GOV_SOURCE_ID, domain: 'funding', runId: 'RUN-09', requestedAt: '2026-10-14T00:00:00.000Z' })
+  const adapterResult = syntheticAdapterResult({
+    request,
+    sourceName: 'evidence carriage fixture',
+    adapterType: 'grantsgov',
+    results: [
+      makeRaw({
+        sourceId: GRANTS_GOV_SOURCE_ID,
+        sourceUrl: 'https://www.grants.gov/search-results-detail/1',
+        title: 'Evidenced',
+        sourceRecordId: 'E-1',
+        rawPayload: JSON.stringify({ id: '1', cfdaList: ['11.061'] }),
+      }),
+    ],
+  })
+  const [candidate] = adapterResult.results.map((item) => candidateFromRawResult(adapterResult, item))
+  assert.equal(candidate.candidateId, 'DC:SU-GRANTS-001:E-1')
+  assert.deepEqual(candidate.sourceEvidence?.programmes, ['11.061'])
+  assert.equal(candidate.candidateStatus, 'NEW')
+})

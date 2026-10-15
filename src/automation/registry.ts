@@ -9,9 +9,10 @@
  * The seed `DEFAULT_SOURCE_REGISTRY` contains GlobalTenders (registration only —
  * never queried), TED (the verified real EU procurement source, Phase U),
  * USAspending (the verified real US federal funding source, Phase V),
- * Grants.gov (the real US federal grant-opportunity source, Phase 19B — access
- * state UNKNOWN until verified), and the two local fixture sources used by the
- * fixture adapter. Access states follow Architecture §7 exactly.
+ * Grants.gov (the real US federal grant-opportunity source, Phase 19B) and the
+ * EU Funding & Tenders source (Phase 21C), both promoted to AVAILABLE in Phase
+ * 02 after an observed read-only search, plus the two local fixture sources used
+ * by the fixture adapter. Access states follow Architecture §7 exactly.
  */
 
 import type { AccessState, DiscoveryCapability, DiscoveryDomain, SourceApplicability } from './types'
@@ -109,6 +110,7 @@ export const TED_SOURCE_ID = 'SU-TED-001'
 export const USA_SPENDING_SOURCE_ID = 'SU-US-001'
 export const GRANTS_GOV_SOURCE_ID = 'SU-GRANTS-001'
 export const EU_SEDIA_SOURCE_ID = 'SU-EU-001'
+export const FTS_SOURCE_ID = 'SU-FTS-001'
 
 export const FIXTURE_ADAPTER_TYPE = 'fixture'
 export const GLOBALTENDERS_ADAPTER_TYPE = 'globaltenders'
@@ -116,6 +118,7 @@ export const TED_ADAPTER_TYPE = 'ted'
 export const USA_SPENDING_ADAPTER_TYPE = 'usaspending'
 export const GRANTS_GOV_ADAPTER_TYPE = 'grantsgov'
 export const EU_SEDIA_ADAPTER_TYPE = 'eu-sedia'
+export const FTS_ADAPTER_TYPE = 'fts'
 
 /**
  * Deterministic, frozen, typed seed. GlobalTenders is registered as metadata
@@ -195,13 +198,14 @@ export const DEFAULT_SOURCE_REGISTRY: SourceRegistry = createSourceRegistry([
     domain: 'api.grants.gov',
     applicability: 'funding',
     discoveryCapability: 'listing_search',
-    accessState: 'UNKNOWN',
+    accessState: 'AVAILABLE',
     adapterType: GRANTS_GOV_ADAPTER_TYPE,
     provenanceRequirements: ['listing_url', 'detail_url', 'raw_payload', 'observed_at', 'query_terms'],
     notesRestrictions: [
-      'Official public US federal grant search (Grants.gov, api.grants.gov), documentedly POST JSON with no login and no API key. Returns grant OPPORTUNITIES — posted/forecasted/closed/archived solicitations a company can apply to — NOT historical award records.',
-      'ACCESS_STATE is UNKNOWN: the endpoint is documented as public, but no verified read-only search has been performed yet, so access is never assumed AVAILABLE. Promote to AVAILABLE only after an observed read-only query (a later phase wires the live store).',
-      'Records preserve the source status and open/close dates, but no adapter computes an "is currently open" verdict and no eligibility for a TVB company is implied.',
+      'Official public US federal grant search (Grants.gov, api.grants.gov), POST JSON with no login and no API key. Returns grant OPPORTUNITIES — posted/forecasted/closed/archived solicitations a company can apply to — NOT historical award records.',
+      'ACCESS_STATE reflects a verified READ-ONLY search on 2026-10-14: POST search2 with oppStatuses=posted returned HTTP 200 (hitCount 865 posted opportunities). Verification is recorded as an observed fact, not merely the existence of an adapter.',
+      'One search request per discovery run; no bulk export, no document downloads, no rate-limit circumvention. Request failures are reported as failures, never converted into empty successes.',
+      'Records preserve the source status and open/close dates, but no adapter computes an "is currently open" verdict from this registry entry alone and no eligibility for a TVB company is implied; the separate shared actionability classifier decides open vs. not.',
     ],
   },
   {
@@ -210,13 +214,28 @@ export const DEFAULT_SOURCE_REGISTRY: SourceRegistry = createSourceRegistry([
     domain: 'api.tech.ec.europa.eu',
     applicability: 'funding',
     discoveryCapability: 'listing_search',
-    accessState: 'UNKNOWN',
+    accessState: 'AVAILABLE',
     adapterType: EU_SEDIA_ADAPTER_TYPE,
     provenanceRequirements: ['listing_url', 'detail_url', 'raw_payload', 'observed_at', 'query_terms'],
     notesRestrictions: [
       'Official EU Funding & Tenders Portal search API (api.tech.ec.europa.eu, search-api SEDIA collection), public with the shared read-only apiKey=SEDIA. This phase returns GRANT TOPICS, EXTERNAL-ACTION GRANTS, and CASCADE FUNDING CALLS only; EU TENDERS (type 0) are deliberately NOT requested because the tender classification contract is not fully verified (Phase 21B).',
-      'ACCESS_STATE is UNKNOWN: the endpoint is documented as public, but no in-app verified read-only search has been performed yet, so access is never assumed AVAILABLE. The live surface builds a RUN-SCOPED view (like Grants.gov) that treats ONLY SU-EU-001 as AVAILABLE for that run.',
+      'ACCESS_STATE reflects a verified READ-ONLY search on 2026-10-14: POST search (multipart query, status in {open-for-submission, forthcoming}) returned HTTP 200 (totalResults 1200 grant topics/calls). Verification is recorded as an observed fact, not merely the existence of an adapter.',
+      'One search request per discovery run; no bulk export, no document downloads, no rate-limit circumvention. Request failures are reported as failures, never converted into empty successes.',
       'Records classify by DATASOURCE + type (never type alone); FAQ documents (DATASOURCE SEDIA_FAQ) are excluded and remaining records are deduplicated by their stable reference. The source status code is carried as evidence; a record is marked currently-open only when the status is "open for submission", the deadline is present and in the future, and the official link and provenance are present.',
+    ],
+  },
+  {
+    sourceId: FTS_SOURCE_ID,
+    name: 'UK Find a Tender Service (FTS) — Official UK Procurement Notices',
+    domain: 'find-tender.service.gov.uk',
+    applicability: 'procurement',
+    discoveryCapability: 'listing_search',
+    accessState: 'UNKNOWN',
+    adapterType: FTS_ADAPTER_TYPE,
+    provenanceRequirements: ['listing_url', 'detail_url', 'raw_payload', 'observed_at'],
+    notesRestrictions: [
+      'Public OCDS API (ocdsReleasePackages), no authentication. READ-ONLY access verified in Phase 03 by live sample; status/tenderPeriod endDate and ocid preserved as evidence.',
+      'Records with no tender object or no ocid are excluded at parse time. Source status (e.g. active/complete) and deadline carried; no assumption of openness.',
     ],
   },
 ])

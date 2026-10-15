@@ -23,6 +23,7 @@
  */
 
 import type { AccessState, DiscoveryDomain } from './types'
+import type { OpportunityEnrichment } from './opportunity-enrichment'
 
 /** Locked Phase A candidate-state vocabulary (Architecture §14). */
 export const CANDIDATE_STATES = [
@@ -183,10 +184,23 @@ export interface DiscoveryCandidate {
   sourceRawType: string | null
   /** Source-published lifecycle status (e.g. Grants.gov `oppStatus`) or null. Never an "open"/eligibility verdict. */
   sourceStatus: string | null
+  /**
+   * Phase 07B link-validation status carried from the adapter (`linkValidation`
+   * on RawResult); null when the adapter does not distinguish. Drives honest
+   * link rendering — never an actionability input.
+   */
+  sourceLinkValidation?: 'source-provided' | 'constructed-unverified' | 'confirmed-unavailable' | null
   domain: DiscoveryDomain
   candidateType: CandidateType
   candidateStatus: CandidateState
   provenance: CandidateProvenance
+  /**
+   * Phase 09 additive requirement evidence derived from the preserved raw
+   * payload (programmes, sectors, categories, budget/value, documents,
+   * lifecycle notes). Review evidence only — never a classifier, gate, or
+   * match-engine input. Absent when the transform predates enrichment.
+   */
+  sourceEvidence?: OpportunityEnrichment | null
   normalization: NormalizationMetadata | null
   classification: ClassificationMetadata | null
   duplicate: DuplicateMetadata | null

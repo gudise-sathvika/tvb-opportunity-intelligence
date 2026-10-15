@@ -259,6 +259,13 @@ export function createLiveUsaSpendingDiscovery(options: {
       const input = inputFor(context, cleaned)
       const result = orchestrateDiscoveryRun(input, dependenciesFor(adapter))
       const candidates = result.candidates.filter((candidate) => matchesKeyword(candidate, context.keyword))
+      // Phase 01B: USAspending is obligated federal award HISTORY, not an open
+      // solicitation feed. The shared classifier returns `historical` for every
+      // USAspending record, so none is ever `open` (see opportunity-status.ts).
+      // This store therefore deliberately does NOT build an actionable-open pool;
+      // the results UI renders these records as historical context (its
+      // `isHistoricalSource` path), never as actionable open calls. No record
+      // here can pass `isActionableOpen`.
       const needsReview = candidates.filter(candidateNeedsReview).length
       return deepFreeze({
         companyId: cleaned,

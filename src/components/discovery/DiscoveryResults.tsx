@@ -1,13 +1,16 @@
+import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import type { DiscoveryCandidate } from '../../automation/candidate'
 import type { DiscoveryCompanyResult, DiscoveryRunOutcome } from '../../automation/discovery-fixture'
 import {
   EU_SEDIA_SOURCE_ID,
+  FTS_SOURCE_ID,
   GRANTS_GOV_SOURCE_ID,
   TED_SOURCE_ID,
   USA_SPENDING_SOURCE_ID,
 } from '../../automation/registry'
 import { classifyOpportunityState } from '../../automation/opportunity-status'
+import { EU_PORTAL_SEARCH_URL } from '../../automation/eu-sedia-adapter'
 import type { OpportunityState } from '../../automation/opportunity-status'
 import AutomationWorkflow from './AutomationWorkflow'
 import {
@@ -97,6 +100,27 @@ function grantsGovNote(outcome: DiscoveryRunOutcome): string {
   return `${lead} ${tail}`
 }
 
+/**
+ * Phase 34: describes exactly which procurement sources a live run queried.
+ * A blank keyword skips TED as insufficiently specified (no company-name
+ * fallback), so the note must not claim a TED search that never happened.
+ */
+function liveProcurementNote(outcome: DiscoveryRunOutcome): string {
+  const queried = new Set<string>()
+  for (const company of outcome.companies) {
+    for (const result of company.sourceResults) queried.add(result.sourceId)
+  }
+  const ted = queried.has(TED_SOURCE_ID)
+  const fts = queried.has(FTS_SOURCE_ID)
+  if (ted && fts) {
+    return 'This run queried the real TED source. It also queried the real UK Find a Tender Service (one broad latest-notices search per run, shared by all selected companies). Each listing is stored once per company run, and review items land in the Human review queue.'
+  }
+  if (ted) {
+    return 'This run queried the real TED source. Each listing is stored once per company run, and review items land in the Human review queue.'
+  }
+  return 'This run did not query TED (no procurement keyword was entered) and queried the real UK Find a Tender Service (one broad latest-notices search per run, shared by all selected companies). Each listing is stored once per company run, and review items land in the Human review queue.'
+}
+
 /** Phase U: marks whether a run's source is a real verified source or a fixture. */
 function SourceKindChip({ sourceId }: { sourceId: string | null }) {
   const kind = sourceKindFor(sourceId)
@@ -178,12 +202,55 @@ const LINK_LABEL: Record<string, string> = {
   [GRANTS_GOV_SOURCE_ID]: 'Official Grants.gov record',
   [EU_SEDIA_SOURCE_ID]: 'Official EU portal record',
   [TED_SOURCE_ID]: 'Official TED notice',
+  [FTS_SOURCE_ID]: 'Official Find a Tender notice',
   [USA_SPENDING_SOURCE_ID]: 'Official USAspending award',
 }
 
-/** The state chip. `open` is the ONLY actionable bucket; everything else is excluded. */
-function OpportunityChip({ state, reason }: { state: OpportunityState; reason: string }) {
-  if (state === 'open') return <span className="dg-chip dg-chip--completed">Open (confirmed)</span>
+/**
+ * Phase 09: source-backed requirement evidence for one candidate. Only
+ * evidenced facts render, each traceable to its source; gaps are stated once
+ * via the first note. Never an eligibility claim.
+ */
+function OpportunityEvidence({ candidate }: { candidate: DiscoveryCandidate }): ReactNode {
+  const evidence = candidate.sourceEvidence ?? null
+  if (evidence === null) return null
+  const facts: string[] = []
+  if (evidence.programmes !== null) facts.push(`Programmes: ${evidence.programmes.slice(0, 3).join('; ')}`)
+  if (evidence.sectors !== null) facts.push(`Sectors: ${evidence.sectors.slice(0, 3).join('; ')}`)
+  if (evidence.categories !== null) facts.push(`Categories: ${evidence.categories.slice(0, 3).join('; ')}`)
+  if (evidence.budget !== null) facts.push(`Budget: ${evidence.budget.slice(0, 120)}`)
+  if (evidence.value !== null) facts.push(`Value: ${evidence.value}`)
+  for (const note of evidence.lifecycleNotes.slice(0, 2)) facts.push(note.slice(0, 160))
+  if (facts.length === 0 && evidence.notes.length === 0 && evidence.documents.length === 0) return null
+  return (
+    <>
+      {facts.length > 0 ? <span className="dg-candidate__meta">{facts.join(' · ')}</span> : null}
+      {evidence.documents.slice(0, 3).map((doc) => (
+        <a key={doc.url} className="dg-candidate__link" href={doc.url} target="_blank" rel="noreferrer">
+          Official document: {doc.label.slice(0, 80)}
+        </a>
+      ))}
+      {evidence.documentFindings.slice(0, 2).map((finding, index) => (
+        <span key={index} className="dg-candidate__meta">
+          Official excerpt{finding.section ? ` (${finding.section.slice(0, 80)})` : ''}: “
+          {finding.excerpt.slice(0, 200)}” — pointers only, not an eligibility verdict.
+        </span>
+      ))}
+      {evidence.notes.length > 0 ? (
+        <span className="dg-candidate__meta">Evidence gaps: {evidence.notes[0].slice(0, 160)}</span>
+      ) : null}
+    </>
+  )
+}
+
+/**
+ * Phase 15A: the open verdict is scoped to the run's observation time — an
+ * approval or a later viewing never re-proves current openness. The
+ * `Open (confirmed)` prefix is preserved verbatim for existing assertions.
+ */
+function OpportunityChip({ state, reason, asOf }: { state: OpportunityState; reason: string; asOf: string }) {
+  if (state === 'open')
+    return <span className="dg-chip dg-chip--completed">Open (confirmed, as of {asOf.slice(0, 10)})</span>
   if (state === 'forthcoming') return <span className="dg-chip dg-chip--running">Forthcoming</span>
   return <span className="dg-chip dg-chip--failed">Excluded: {reason}</span>
 }
@@ -220,10 +287,17 @@ function OpportunityCandidates({
               {candidate.sourceRawType ?? 'UNKNOWN'} · status {candidate.sourceStatus ?? 'unknown'} · deadline{' '}
               {candidate.sourceDeadline ?? '—'}
             </span>
+            <OpportunityEvidence candidate={candidate} />
             <a className="dg-candidate__link" href={candidate.sourceUrl} target="_blank" rel="noreferrer">
               {LINK_LABEL[sourceId] ?? 'Official record'}
+              {candidate.sourceLinkValidation === 'constructed-unverified' ? ' — destination unverified' : ''}
             </a>
-            <OpportunityChip state={verdict.state} reason={verdict.reason} />
+            {candidate.sourceLinkValidation === 'constructed-unverified' ? (
+              <a className="dg-candidate__link" href={EU_PORTAL_SEARCH_URL} target="_blank" rel="noreferrer">
+                Official EU search (locate by topic ID — detail page not verified)
+              </a>
+            ) : null}
+            <OpportunityChip state={verdict.state} reason={verdict.reason} asOf={now} />
           </li>
         )
       })}
@@ -247,7 +321,7 @@ function ExcludedCandidates({ candidates, now }: { candidates: readonly Discover
                 {candidate.sourceRawType ?? 'UNKNOWN'} · status {candidate.sourceStatus ?? 'unknown'} · deadline{' '}
                 {candidate.sourceDeadline ?? '—'}
               </span>
-              <OpportunityChip state={verdict.state} reason={verdict.reason} />
+              <OpportunityChip state={verdict.state} reason={verdict.reason} asOf={now} />
             </li>
           )
         })}
@@ -298,7 +372,7 @@ export default function DiscoveryResults({ outcome }: { outcome: DiscoveryRunOut
               ? euSediaNote(outcome)
               : grantsGovNote(outcome)
           : outcome.scenario === 'live'
-            ? 'This run queried the real TED source. Each listing is stored once per company run, and review items land in the Human review queue.'
+            ? liveProcurementNote(outcome)
             : 'Findings come from the local scenario sources only. A listing found for several companies stays listed once per company run, and review items land in the Human review queue.'}
       </p>
 
@@ -310,7 +384,9 @@ export default function DiscoveryResults({ outcome }: { outcome: DiscoveryRunOut
           const state = COMPANY_STATE_FOR_OUTCOME[company.outcome]
           const hasOpportunityRecords =
             sourceId !== null &&
-            [GRANTS_GOV_SOURCE_ID, EU_SEDIA_SOURCE_ID, TED_SOURCE_ID, USA_SPENDING_SOURCE_ID].includes(sourceId)
+            [GRANTS_GOV_SOURCE_ID, EU_SEDIA_SOURCE_ID, TED_SOURCE_ID, FTS_SOURCE_ID, USA_SPENDING_SOURCE_ID].includes(
+              sourceId,
+            )
           const gv = hasOpportunityRecords ? sourceCounts(company, outcome.requestedAt) : null
           return (
             <li key={company.companyId}>
