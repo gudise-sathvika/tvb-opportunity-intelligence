@@ -5,8 +5,9 @@
  *
  * It binds to loopback by default (`TVB_HOST=127.0.0.1`). The Vault-write
  * bridge is deliberately NOT registered here: this process imports no
- * vault-writer code and exposes no filesystem-write route. Only the TED,
- * USAspending, and Grants.gov read-only handlers are wired in.
+ * vault-writer code and exposes no filesystem-write route. All seven read-only
+ * source handlers are wired in (TED, USAspending, Grants.gov, EU SEDIA, FTS,
+ * GLEIF, SEC enrichment).
  *
  * Run with the project's existing `tsx` runtime (no new dependency, no build
  * step); the project's tsconfigs are `noEmit`, so a TS-to-JS server build is
@@ -25,6 +26,18 @@ import type { UsaSpendingBridgeSearchRequest } from '../src/live-source/usaspend
 import { handleGrantsGovBridge } from '../src/live-source/grantsgov-bridge/handler'
 import { GRANTS_GOV_BRIDGE_SEARCH_PATH } from '../src/live-source/grantsgov-bridge/contract'
 import type { GrantsGovBridgeSearchRequest } from '../src/live-source/grantsgov-bridge/contract'
+import { handleEuSediaBridge } from '../src/live-source/eu-sedia-bridge/handler'
+import { EU_SEDIA_BRIDGE_SEARCH_PATH } from '../src/live-source/eu-sedia-bridge/contract'
+import type { EuSediaBridgeSearchRequest } from '../src/live-source/eu-sedia-bridge/contract'
+import { handleFtsBridge } from '../src/live-source/fts-bridge/handler'
+import { FTS_BRIDGE_SEARCH_PATH } from '../src/live-source/fts-bridge/contract'
+import type { FtsBridgeSearchRequest } from '../src/live-source/fts-bridge/contract'
+import { handleGleifBridge } from '../src/live-source/gleif-bridge/handler'
+import { GLEIF_BRIDGE_SEARCH_PATH } from '../src/live-source/gleif-bridge/contract'
+import type { GleifBridgeSearchRequest } from '../src/live-source/gleif-bridge/contract'
+import { handleSecEnrichBridge } from '../src/live-source/sec-bridge/handler'
+import { SEC_BRIDGE_ENRICH_PATH } from '../src/live-source/sec-bridge/contract'
+import type { SecBridgeEnrichRequest } from '../src/live-source/sec-bridge/contract'
 import { createRequestListener } from './app'
 import { ConfigError, readHostConfig } from './config'
 import type { HostConfig } from './config'
@@ -50,6 +63,10 @@ export function createProductionServer(config: HostConfig): ProductionHost {
       [TED_BRIDGE_SEARCH_PATH]: (value) => handleTedBridge(value as TedBridgeSearchRequest | null),
       [USA_BRIDGE_SEARCH_PATH]: (value) => handleUsaSpendingBridge(value as UsaSpendingBridgeSearchRequest | null),
       [GRANTS_GOV_BRIDGE_SEARCH_PATH]: (value) => handleGrantsGovBridge(value as GrantsGovBridgeSearchRequest | null),
+      [EU_SEDIA_BRIDGE_SEARCH_PATH]: (value) => handleEuSediaBridge(value as EuSediaBridgeSearchRequest | null),
+      [FTS_BRIDGE_SEARCH_PATH]: (value) => handleFtsBridge(value as FtsBridgeSearchRequest | null),
+      [GLEIF_BRIDGE_SEARCH_PATH]: (value) => handleGleifBridge(value as GleifBridgeSearchRequest | null),
+      [SEC_BRIDGE_ENRICH_PATH]: (value) => handleSecEnrichBridge(value as SecBridgeEnrichRequest | null),
     },
     allowedOrigins: config.allowedOrigins,
     rateLimit: config.rateLimit,
@@ -98,7 +115,8 @@ function main(): void {
     console.log(`[tvb-host] listening on http://${config.host}:${port}`)
     console.log(`[tvb-host] serving static assets from ${config.distDir}`)
     console.log(
-      `[tvb-host] read-only bridges: ${TED_BRIDGE_SEARCH_PATH}, ${USA_BRIDGE_SEARCH_PATH}, ${GRANTS_GOV_BRIDGE_SEARCH_PATH}`,
+      `[tvb-host] read-only bridges: ${TED_BRIDGE_SEARCH_PATH}, ${USA_BRIDGE_SEARCH_PATH}, ${GRANTS_GOV_BRIDGE_SEARCH_PATH}, ` +
+        `${EU_SEDIA_BRIDGE_SEARCH_PATH}, ${FTS_BRIDGE_SEARCH_PATH}, ${GLEIF_BRIDGE_SEARCH_PATH}, ${SEC_BRIDGE_ENRICH_PATH}`,
     )
     console.log(
       `[tvb-host] limits: maxConcurrent=${config.maxConcurrent}, rateLimit=${config.rateLimit.max}/` +

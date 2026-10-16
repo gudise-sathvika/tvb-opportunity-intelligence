@@ -55,3 +55,20 @@ test('rejects unsafe or invalid numeric limits', () => {
   assert.throws(() => readHostConfig({ TVB_REQUEST_TIMEOUT_MS: '10' }, process.cwd()), ConfigError)
   assert.throws(() => readHostConfig({ TVB_MAX_CONCURRENT: '0' }, process.cwd()), ConfigError)
 })
+
+test('platform PORT is honored when TVB_PORT is absent (Render behavior)', () => {
+  const config = readHostConfig({ PORT: '10000' }, process.cwd())
+  assert.equal(config.port, 10000)
+})
+
+test('explicit TVB_PORT wins over platform PORT and is never silently ignored', () => {
+  const config = readHostConfig({ TVB_PORT: '8080', PORT: '10000' }, process.cwd())
+  assert.equal(config.port, 8080)
+  assert.throws(() => readHostConfig({ PORT: 'abc' }, process.cwd()), ConfigError)
+  assert.throws(() => readHostConfig({ PORT: '70000' }, process.cwd()), ConfigError)
+})
+
+test('blank platform values fall back to the default port', () => {
+  assert.equal(readHostConfig({ PORT: '' }, process.cwd()).port, 4174)
+  assert.equal(readHostConfig({ PORT: '   ' }, process.cwd()).port, 4174)
+})

@@ -56,9 +56,24 @@ function readInt(env: NodeJS.ProcessEnv, name: string, fallback: number, range: 
   return value
 }
 
+/**
+ * Port precedence (explicit, never silent): an explicitly set `TVB_PORT` wins
+ * (local-development override); otherwise a platform-assigned `PORT` (Render
+ * and similar hosts) is honored; otherwise the existing 4174 default stands.
+ * A present-but-invalid value in the winning variable fails startup — a
+ * platform port is never silently ignored.
+ */
 function readPort(env: NodeJS.ProcessEnv): number {
-  const port = readInt(env, 'TVB_PORT', 4174, { min: 1, max: 65535 })
-  return port
+  const range = { min: 1, max: 65535 }
+  const explicit = env['TVB_PORT']
+  if (explicit !== undefined && explicit.trim() !== '') {
+    return readInt(env, 'TVB_PORT', 4174, range)
+  }
+  const platform = env['PORT']
+  if (platform !== undefined && platform.trim() !== '') {
+    return readInt(env, 'PORT', 4174, range)
+  }
+  return 4174
 }
 
 function readHost(env: NodeJS.ProcessEnv): string {
