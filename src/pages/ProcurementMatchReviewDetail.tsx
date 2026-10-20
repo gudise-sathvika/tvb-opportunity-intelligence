@@ -10,13 +10,19 @@ import {
   isDemoMatchReviewRequest,
 } from '../automation/match-review-source'
 import type { ProcurementMatchReviewItem } from '../automation/procurement-match-review'
+import {
+  loadProcurementMatchReviewItems,
+  updateProcurementMatchReviewItem,
+} from '../target-companies/procurement-match-review-store'
 
 export default function ProcurementMatchReviewDetail() {
   const { proposalId } = useParams<{ proposalId: string }>()
   const [params] = useSearchParams()
   const demo = isDemoMatchReviewRequest(params.get(MATCH_REVIEW_DEMO_PARAM))
   const [item, setItem] = useState<ProcurementMatchReviewItem | undefined>(() =>
-    demo ? procurementMatchReviewFixtureStore.item(proposalId ?? '') : undefined,
+    demo
+      ? procurementMatchReviewFixtureStore.item(proposalId ?? '')
+      : loadProcurementMatchReviewItems().find((entry) => entry.proposal.proposalId === proposalId),
   )
 
   if (!item) {
@@ -35,7 +41,11 @@ export default function ProcurementMatchReviewDetail() {
     <section className="page">
       <nav className="crumbs" aria-label="Back">
         <BackNavigation
-          to={`/procurement-match-review?${MATCH_REVIEW_DEMO_PARAM}=${MATCH_REVIEW_DEMO_VALUE}`}
+          to={
+            demo
+              ? `/procurement-match-review?${MATCH_REVIEW_DEMO_PARAM}=${MATCH_REVIEW_DEMO_VALUE}`
+              : '/procurement-match-review'
+          }
           label="Procurement match review queue"
         />
       </nav>
@@ -52,7 +62,29 @@ export default function ProcurementMatchReviewDetail() {
         demonstration records. It is not a real match and appears only in demo mode.
       </div>
 
-      <ProcurementMatchReviewDetailView item={item} onDecided={(updated) => setItem(updated)} />
+      <ProcurementMatchReviewDetailView
+        item={item}
+        demo={demo}
+        onDecided={(updated) => {
+          if (demo) {
+            const decision = updated.audit[updated.audit.length - 1]
+            if (!decision) throw new Error('The procurement match review decision has no audit entry.')
+            if (decision.newStatus === 'PENDING') {
+              throw new Error('The procurement match review decision is not final.')
+            }
+            procurementMatchReviewFixtureStore.apply({
+              proposalId: updated.proposal.proposalId,
+              decision: decision.newStatus,
+              reviewerId: decision.reviewerId,
+              decidedAt: decision.decidedAt,
+              reason: decision.reason,
+            })
+          } else if (!updateProcurementMatchReviewItem(updated)) {
+            throw new Error('The procurement match review decision could not be persisted in browser storage.')
+          }
+          setItem(updated)
+        }}
+      />
     </section>
   )
 }

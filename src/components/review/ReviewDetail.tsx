@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import BackNavigation from '../navigation/BackNavigation'
 import { reviewFixtureStore } from '../../automation/review-fixture'
-import { installReviewPersistence } from '../../live-source/review-persistence'
 import { associateCompany } from '../../live-source/company-associations'
-import { COMPANY_DIRECTORY_NAMES } from '../../data/company-directory-names'
+import { loadImportedTargetCompanies } from '../../target-companies/store'
+import { csvPreviewToTargetCompanies } from '../../target-companies/profiles'
 import {
   REVIEW_DEMO_PARAM,
   REVIEW_DEMO_VALUE,
@@ -14,10 +14,15 @@ import {
 import type { ReviewItem, ReviewDecisionKind } from '../../automation/review-queue'
 import { TERMINAL_REVIEW_STATUSES } from '../../automation/review-queue'
 import { ReviewStatusBadge } from './ReviewStatusBadge'
-import VaultWritePanel from './VaultWritePanel'
 import { rfpDisplay } from '../vocabulary'
 import { DOMAIN_LABEL, REVIEW_STATUS_LABEL, companyLabelForReview, deadlineOf, publicationDateOf } from './labels'
 import { FTS_LIVE_POOL_COMPANY_ID } from '../../live-source/live-discovery'
+
+function availableCompanyNames(): string[] {
+  const imported = loadImportedTargetCompanies()
+  const importedNames = imported ? csvPreviewToTargetCompanies(imported).map((company) => company.name) : []
+  return [...new Set(importedNames)]
+}
 
 /**
  * Review detail (Phase F brief §5, §6, §7, §8).
@@ -35,13 +40,6 @@ export default function ReviewDetailView() {
   const demo = isDemoReviewRequest(params.get(REVIEW_DEMO_PARAM))
   const [item, setItem] = useState<ReviewItem | undefined>(() => resolveReviewItem(reviewId, params.get(REVIEW_DEMO_PARAM)))
   const [saved, setSaved] = useState<string | null>(null)
-
-  // Phase 31: restore saved decisions on direct entry and persist decisions made here.
-  useEffect(() => {
-    const uninstall = installReviewPersistence()
-    setItem(resolveReviewItem(reviewId, params.get(REVIEW_DEMO_PARAM)))
-    return uninstall
-  }, [])
 
   const onDecided = (updated: ReviewItem, label: string) => {
     setItem(updated)
@@ -62,7 +60,7 @@ export default function ReviewDetailView() {
           </p>
           <p>
             <Link
-              to={demo ? `/review?${REVIEW_DEMO_PARAM}=${REVIEW_DEMO_VALUE}` : '/review'}
+              to={demo ? `/discovery?view=human-review&${REVIEW_DEMO_PARAM}=${REVIEW_DEMO_VALUE}` : '/discovery?view=human-review'}
               className="btn"
             >
               Back to Human review
@@ -77,15 +75,19 @@ export default function ReviewDetailView() {
     <section className="page">
       <nav className="crumbs" aria-label="Back">
         <BackNavigation
-          to={demo ? `/review?${REVIEW_DEMO_PARAM}=${REVIEW_DEMO_VALUE}` : '/review'}
+          to={
+            demo
+              ? `/discovery?view=${params.get('view') ?? 'human-review'}&${REVIEW_DEMO_PARAM}=${REVIEW_DEMO_VALUE}`
+              : `/discovery?view=${params.get('view') ?? 'human-review'}`
+          }
           label="Review queue"
         />
         {runScopeQuery !== null ? (
           <>
             {' '}
-            <Link to={`/history/${encodeURIComponent(runScopeQuery)}`}>Back to run {runScopeQuery}</Link>
+            <Link to={`/discovery/history/${encodeURIComponent(runScopeQuery)}`}>Back to run {runScopeQuery}</Link>
             {' '}
-            <Link to={`/review?run=${encodeURIComponent(runScopeQuery)}`}>Back to run queue</Link>
+            <Link to={`/discovery?view=human-review&run=${encodeURIComponent(runScopeQuery)}`}>Back to run queue</Link>
           </>
         ) : null}
       </nav>
@@ -277,29 +279,6 @@ export default function ReviewDetailView() {
           </section>
         )}
 
-        {item.reviewStatus === 'APPROVED' ? (
-          <section className="card" aria-label="Application next step">
-            <h2 className="card__title">Next step: application</h2>
-            <p className="dg-note" role="note">
-              Approval records a human decision — it is not eligibility proof and TVB does not
-              submit applications automatically. Open the official record below, verify the
-              deadline and requirements are still current, then apply through the source.
-            </p>
-            <p>
-              <a href={item.sourceUrl} target="_blank" rel="noreferrer noopener" className="urllink">
-                Open official {item.domain === 'funding' ? 'application' : 'submission'} page
-              </a>
-            </p>
-            <p>
-              <Link to={`/prepare/${encodeURIComponent(item.reviewId)}`} className="btn">
-                Open application preparation workspace
-              </Link>
-            </p>
-            <p className="dg-note">Deadline on record: {deadlineOf(item) ?? 'unknown — verify at the source'}.</p>
-          </section>
-        ) : null}
-
-        {item.reviewStatus === 'APPROVED' ? <VaultWritePanel item={item} /> : null}
       </div>
     </section>
   )
@@ -357,12 +336,10 @@ function DecisionPanel({
   const [note, setNote] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [associationWarning, setAssociationWarning] = useState<string | null>(null)
-  // Phase 32: approval must name its company explicitly. Prefilled when the
-  // item already carries a directory key; blank (and required) otherwise, so a
-  // shared-pool item can never slip through unattributed.
-  const [companyName, setCompanyName] = useState(() =>
-    (COMPANY_DIRECTORY_NAMES as readonly string[]).includes(item.companyId) ? item.companyId : '',
-  )
+  // Approval requires an explicitly imported company record; name-only search
+  // keys are not sufficient context for an association.
+  const companyOptions = availableCompanyNames()
+  const [companyName, setCompanyName] = useState(() => companyOptions.includes(item.companyId) ? item.companyId : '')
 
   const decide = (decision: ReviewDecisionKind) => {
     const reviewer = reviewerId.trim()
@@ -372,8 +349,8 @@ function DecisionPanel({
     }
     let company = companyName.trim()
     if (decision === 'APPROVED') {
-      if (company === '' || !(COMPANY_DIRECTORY_NAMES as readonly string[]).includes(company)) {
-        setError('Confirm the intended company from the directory before approving.')
+      if (company === '' || !companyOptions.includes(company)) {
+        setError('Confirm the intended company from the directory or imported companies before approving.')
         return
       }
     }
@@ -446,13 +423,19 @@ function DecisionPanel({
           onChange={(event) => setCompanyName(event.target.value)}
         >
           <option value="">Select the intended company…</option>
-          {COMPANY_DIRECTORY_NAMES.map((name) => (
+          {companyOptions.map((name) => (
             <option key={name} value={name}>
               {name}
             </option>
           ))}
         </select>
       </label>
+      {companyOptions.length === 0 ? (
+        <p className="dg-note" role="note">
+          Import a Companies CSV before associating an approved opportunity. Directory search names alone are not
+          verified company records.
+        </p>
+      ) : null}
       <p className="card__note">
         Approval associates this opportunity with the confirmed company only — never by
         keyword, shared-pool membership, or guess. Approval is not eligibility proof.

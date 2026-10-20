@@ -9,6 +9,7 @@ import {
   MATCH_REVIEW_DEMO_VALUE,
   isDemoMatchReviewRequest,
 } from '../automation/match-review-source'
+import { loadMatchReviewItems, updateMatchReviewItem } from '../target-companies/match-review-store'
 import type { MatchReviewItem } from '../automation/match-review'
 
 export default function MatchReviewDetail() {
@@ -16,7 +17,9 @@ export default function MatchReviewDetail() {
   const [params] = useSearchParams()
   const demo = isDemoMatchReviewRequest(params.get(MATCH_REVIEW_DEMO_PARAM))
   const [item, setItem] = useState<MatchReviewItem | undefined>(() =>
-    demo ? matchReviewFixtureStore.item(proposalId ?? '') : undefined,
+    demo
+      ? matchReviewFixtureStore.item(proposalId ?? '')
+      : loadMatchReviewItems().find((entry) => entry.proposal.proposalId === proposalId),
   )
 
   if (!item) {
@@ -35,7 +38,11 @@ export default function MatchReviewDetail() {
     <section className="page">
       <nav className="crumbs" aria-label="Back">
         <BackNavigation
-          to={`/match-review?${MATCH_REVIEW_DEMO_PARAM}=${MATCH_REVIEW_DEMO_VALUE}`}
+          to={
+            demo
+              ? `/match-review?${MATCH_REVIEW_DEMO_PARAM}=${MATCH_REVIEW_DEMO_VALUE}`
+              : '/match-review'
+          }
           label="Match review queue"
         />
       </nav>
@@ -52,7 +59,28 @@ export default function MatchReviewDetail() {
         demonstration records. It is not a real match and appears only in demo mode.
       </div>
 
-      <MatchReviewDetailView item={item} onDecided={(updated) => setItem(updated)} />
+      <MatchReviewDetailView
+        item={item}
+        onDecided={(updated) => {
+          if (demo) {
+            const decision = updated.audit[updated.audit.length - 1]
+            if (!decision) throw new Error('The match review decision has no audit entry.')
+            if (decision.newStatus === 'PENDING') {
+              throw new Error('The match review decision is not final.')
+            }
+            matchReviewFixtureStore.apply({
+              proposalId: updated.proposal.proposalId,
+              decision: decision.newStatus,
+              reviewerId: decision.reviewerId,
+              decidedAt: decision.decidedAt,
+              reason: decision.reason,
+            })
+          } else if (!updateMatchReviewItem(updated)) {
+            throw new Error('The match review decision could not be persisted in browser storage.')
+          }
+          setItem(updated)
+        }}
+      />
     </section>
   )
 }

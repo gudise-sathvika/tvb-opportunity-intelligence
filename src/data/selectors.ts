@@ -128,7 +128,7 @@ export function collectionOf(id: string): CollectionKey | undefined {
 /** Route path for a record ID, e.g. `/matches/MATCH-002`. */
 export function pathForRecord(id: string): string | null {
   const key = collectionOf(id)
-  return key ? `/${COLLECTION_PATH[key]}/${id}` : null
+  return key === 'companies' ? `/companies/${id}` : null
 }
 
 /* ------------------------------------------------------------------ */

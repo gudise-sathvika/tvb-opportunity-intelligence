@@ -4,8 +4,8 @@
  * A reviewer approving a review item for an intended company creates exactly
  * one association: `{ reviewId, companyId, ... }`. Design rules:
  *
- *  - the company must be an explicitly confirmed directory name (never
- *    inferred, never a pool marker, never blank);
+ *  - the company must be an explicitly confirmed imported CSV company record
+ *    (never inferred from a name-only directory key, a pool marker, or blank);
  *  - the review item must exist and already be APPROVED (approval happens
  *    first through the real Phase E path; this store never approves);
  *  - one review item yields at most one association (terminal decisions make
@@ -20,9 +20,10 @@
  *    evidence; a missing review record renders as unavailable, never guessed.
  */
 
-import { COMPANY_DIRECTORY_NAMES } from '../data/company-directory-names'
 import { reviewFixtureStore } from '../automation/review-fixture'
 import type { DiscoveryDomain } from '../automation/types'
+import { loadImportedTargetCompanies } from '../target-companies/store'
+import { csvPreviewToTargetCompanies } from '../target-companies/profiles'
 
 export const COMPANY_ASSOCIATIONS_KEY = 'tvb.company-associations.v1'
 
@@ -88,13 +89,21 @@ function writeAll(storage: AssociationStorage | null, associations: readonly Com
   }
 }
 
+function isKnownCompany(companyId: string): boolean {
+  const imported = loadImportedTargetCompanies()
+  return (
+    imported !== null &&
+    csvPreviewToTargetCompanies(imported).some((company) => company.name.toLocaleLowerCase() === companyId.toLocaleLowerCase())
+  )
+}
+
 export type AssociateCompanyResult =
   | { readonly ok: true; readonly association: CompanyAssociation; readonly duplicate: boolean }
   | { readonly ok: false; readonly error: string }
 
 /**
  * Records the company association for an approved review item. Rejects blank
- * or non-directory companies, missing items, and non-approved items instead
+ * or unknown companies, missing items, and non-approved items instead
  * of fabricating anything. Idempotent per review id.
  */
 export function associateCompany(
@@ -105,8 +114,8 @@ export function associateCompany(
   const companyId = input.companyId.trim()
   if (reviewId === '') return { ok: false, error: 'a review id is required' }
   if (companyId === '') return { ok: false, error: 'confirm the intended company before associating' }
-  if (!(COMPANY_DIRECTORY_NAMES as readonly string[]).includes(companyId)) {
-    return { ok: false, error: 'the confirmed company must be a directory entry' }
+  if (!isKnownCompany(companyId)) {
+    return { ok: false, error: 'the confirmed company must be present in the imported company records' }
   }
   const item = reviewFixtureStore.item(reviewId)
   if (item === undefined) return { ok: false, error: 'no such review item in the local store' }

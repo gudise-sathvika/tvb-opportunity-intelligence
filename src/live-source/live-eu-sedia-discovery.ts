@@ -45,6 +45,7 @@ import { createReviewQueue, reviewStatusForCandidate } from '../automation/revie
 import { partitionByActionability } from '../automation/opportunity-status'
 import { createEuSediaAdapter } from '../automation/eu-sedia-adapter'
 import type { EuSediaTransport } from '../automation/eu-sedia-adapter'
+import { dedupeHandoffCandidates } from './live-discovery'
 import { EU_SEDIA_BRIDGE_SEARCH_PATH } from './eu-sedia-bridge/contract'
 import type { EuSediaBridgeSearchRequest, EuSediaBridgeSearchResponse } from './eu-sedia-bridge/contract'
 
@@ -316,7 +317,10 @@ export function createLiveEuSediaDiscovery(options: {
         allCandidates.push(...company.candidates)
       }
 
-      const reviewQueue = createReviewQueue(allCandidates, { createdAt: context.requestedAt })
+      const reviewQueue = createReviewQueue(
+        dedupeHandoffCandidates(allCandidates, [], EU_SEDIA_LIVE_POOL_COMPANY_ID),
+        { createdAt: context.requestedAt },
+      )
       reviewFixtureStore.addReviewItems(reviewQueue)
       const outcome: DiscoveryRunOutcome = deepFreeze({
         runId: context.runId,

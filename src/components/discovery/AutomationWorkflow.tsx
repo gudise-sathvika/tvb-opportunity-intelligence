@@ -1,14 +1,10 @@
-import { Link } from 'react-router-dom'
-import type { DiscoveryCandidate } from '../../automation/candidate'
 import type { DiscoveryRunOutcome } from '../../automation/discovery-fixture'
 import type { SourceRunResult } from '../../automation/orchestrator'
 import {
-  CANDIDATE_STATUS_LABEL,
   COMPANY_STATE_FOR_OUTCOME,
   DOMAIN_SUMMARY_LABEL,
   KIND_LABEL,
   LOCATION_LABEL,
-  NORMALIZATION_STATUS_LABEL,
   OUTCOME_LABEL,
   SECTOR_LABEL,
   SOURCE_KIND_LABEL,
@@ -17,13 +13,11 @@ import {
 } from './labels'
 
 /**
- * Transparent agent workflow (Phase I brief §1–§7).
+ * Transparent discovery workflow (Phase I brief §1–§7).
  *
- * UI/observability only: the three founder-requested stages rendered from the
- * run outcome's real values. Agent 1 reads the per-company source results,
- * Agent 2 reads the run counts and classified candidates, and Agent 3 is shown
- * honestly as not run — matching is a later phase and nothing here pretends
- * otherwise. No scores, no model names, no timings, no invented metrics.
+ * UI/observability only: source discovery and classification are rendered from
+ * the run outcome's real values. No scores, model names, timings, or invented
+ * metrics are shown.
  */
 
 function isAccessBlocked(result: SourceRunResult): boolean {
@@ -72,19 +66,6 @@ function SourceDetail({ companyId, result }: { companyId: string; result: Source
             <li key={`${result.sourceId}:w${index}`}>{warning}</li>
           ))}
         </ul>
-      ) : null}
-    </li>
-  )
-}
-
-function CandidateDetail({ candidate }: { candidate: DiscoveryCandidate }) {
-  return (
-    <li className="dg-agent__item">
-      <span className="dg-agent__item-title">{candidate.sourceTitle}</span>{' '}
-      <span>{KIND_LABEL[candidate.domain]}</span> &middot;{' '}
-      <span>{CANDIDATE_STATUS_LABEL[candidate.candidateStatus]}</span>
-      {candidate.normalization !== null ? (
-        <span> &middot; Normalization: {NORMALIZATION_STATUS_LABEL[candidate.normalization.status]}</span>
       ) : null}
     </li>
   )
@@ -180,54 +161,25 @@ export default function AutomationWorkflow({ outcome }: { outcome: DiscoveryRunO
               <li>Needs review: {outcome.needsReview}</li>
               <li>Duplicates: {outcome.counts.duplicates}</li>
             </ul>
-            <details className="dg-agent__detail">
-              <summary>Show classification detail</summary>
-              <ul className="dg-agent__list">
-                {outcome.companies.map((company) =>
-                  company.candidates.map((candidate) => (
-                    <CandidateDetail key={candidate.candidateId} candidate={candidate} />
-                  )),
-                )}
-              </ul>
+            <div className="dg-agent__detail">
               {outcome.keyword !== '' ? (
                 <p className="dg-note">
-                  Keyword &ldquo;{outcome.keyword}&rdquo; matched {matched} of {outcome.counts.candidatesCreated}{' '}
-                  classified candidates; only matched findings proceed.
+                  Keyword &ldquo;{outcome.keyword}&rdquo; matched {matched} candidate observations; canonical
+                  source records appear once in the discovered source list.
                 </p>
-              ) : null}
-            </details>
+              ) : (
+                <p className="dg-note">
+                  Source records found by multiple company searches appear once in the discovered source list.
+                </p>
+              )}
+              <a href="#discovered-source-records">View canonical source records</a>
+            </div>
           </>
         ) : (
           <p className="dg-empty">No candidates reached classification.</p>
         )}
       </div>
 
-      <div className="dg-flow" aria-hidden="true">
-        &darr;
-      </div>
-
-      <div className="dg-agent">
-        <p className="dg-agent__eyebrow">Agent 3</p>
-        <h3 className="dg-agent__name">Company Matching</h3>
-        <p className="dg-agent__purpose">Match approved opportunities to TVB companies.</p>
-        <p>
-          <AgentStatus done={false} runLabel="Completed" idleLabel="Not run" />
-        </p>
-        <ul className="dg-agent__stats">
-          <li>Not run &mdash; discovery runs never invoke matching automatically.</li>
-          <li>
-            Matching needs both approved actionable candidates and verified company profiles
-            (active GLEIF LEI records). This run produced {outcome.needsReview} needing review.
-          </li>
-          <li>
-            <Link to={`/review?run=${encodeURIComponent(outcome.runId)}`}>
-              Review candidates for this run
-            </Link>{' '}
-            before anything can match, or try an on-demand live check from{' '}
-            <Link to="/match-review">Match Review</Link>. Nothing here is approved.
-          </li>
-        </ul>
-      </div>
     </section>
   )
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import type { DiscoveryDomain } from '../automation/types'
 import { discoveryFixtureStore } from '../automation/discovery-fixture'
@@ -15,11 +15,15 @@ import { liveUsaSpendingDiscoveryStore } from '../live-source/live-funding-disco
 import { liveGrantsGovDiscoveryStore } from '../live-source/live-grantsgov-discovery'
 import { liveEuSediaDiscoveryStore } from '../live-source/live-eu-sedia-discovery'
 import { COMPANY_DIRECTORY_NAMES } from '../data/company-directory-names'
+import { loadImportedTargetCompanies, subscribeImportedTargetCompanies } from '../target-companies/store'
+import { csvPreviewToTargetCompanies } from '../target-companies/profiles'
+import TargetCompaniesUpload from '../components/target-companies/TargetCompaniesUpload'
 import CompanySelector from '../components/discovery/CompanySelector'
 import DiscoveryControls from '../components/discovery/DiscoveryControls'
 import DiscoveryResults from '../components/discovery/DiscoveryResults'
 import RunHistory from '../components/discovery/RunHistory'
 import { PROGRESS_LABEL } from '../components/discovery/labels'
+import ReviewQueue from '../components/review/ReviewQueue'
 
 type CompanyProgress = {
   name: string
@@ -29,8 +33,28 @@ type CompanyProgress = {
 export default function Discovery() {
   const [params] = useSearchParams()
   const source = resolveDiscoverySource(params.get(DISCOVERY_DEMO_PARAM))
-  const companies = useMemo(() => [...COMPANY_DIRECTORY_NAMES], [])
+  const view = params.get('view') ?? 'discovery'
+  const [importedPreview, setImportedPreview] = useState(() => loadImportedTargetCompanies())
+  useEffect(
+    () => subscribeImportedTargetCompanies(() => setImportedPreview(loadImportedTargetCompanies())),
+    [],
+  )
+  const importedCompanies = useMemo(
+    () => (importedPreview && importedPreview.rows.length > 0 ? csvPreviewToTargetCompanies(importedPreview) : []),
+    [importedPreview],
+  )
+  const companies = useMemo(
+    () =>
+      importedCompanies.length > 0
+        ? importedCompanies.map((company) => company.name)
+        : [...COMPANY_DIRECTORY_NAMES],
+    [importedCompanies],
+  )
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
+  useEffect(() => {
+    if (importedCompanies.length === 0) return
+    setSelected((previous) => new Set([...previous, ...importedCompanies.map((company) => company.name)]))
+  }, [importedCompanies])
   const [domain, setDomain] = useState<DiscoveryDomain>('funding')
   const [scenario, setScenario] = useState<DiscoveryFixtureScenario>('standard')
   const [sector, setSector] = useState<DiscoverySector>('all')
@@ -47,6 +71,40 @@ export default function Discovery() {
     ...liveDiscoveryStore.history(),
     ...discoveryFixtureStore.history(),
   ])
+
+  if (view === 'human-review') {
+    return <ReviewQueue basePath="/discovery" workspaceView={view} title="Human Review" />
+  }
+  if (view === 'funding-review') {
+    return (
+      <ReviewQueue
+        basePath="/discovery"
+        workspaceView={view}
+        domainFilter="funding"
+        title="Funding Review"
+      />
+    )
+  }
+  if (view === 'procurement-review') {
+    return (
+      <ReviewQueue
+        basePath="/discovery"
+        workspaceView={view}
+        domainFilter="procurement"
+        title="Procurement Review"
+      />
+    )
+  }
+  if (view === 'approved') {
+    return (
+      <ReviewQueue
+        basePath="/discovery"
+        workspaceView={view}
+        fixedStatus="APPROVED"
+        title="Approved"
+      />
+    )
+  }
 
   function toggle(companyId: string) {
     setSelected((prev) => {
@@ -276,9 +334,12 @@ export default function Discovery() {
         </p>
       </header>
 
+      <TargetCompaniesUpload heading="Company directory" importLabel="Import Companies CSV" />
+
       <div className="dg-grid">
         <CompanySelector
           companies={companies}
+          importedCompanies={importedCompanies.length > 0}
           selected={selected}
           demo={source.demo}
           onToggle={toggle}

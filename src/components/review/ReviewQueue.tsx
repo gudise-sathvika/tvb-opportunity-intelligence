@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useReducer } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { installReviewPersistence } from '../../live-source/review-persistence'
 import { reviewFixtureStore } from '../../automation/review-fixture'
 import SegmentedTabs from '../navigation/SegmentedTabs'
 import type { ReviewStatus } from '../../automation/review-queue'
@@ -28,15 +27,7 @@ import {
 } from './labels'
 import type { ReviewItem } from '../../automation/review-queue'
 import { FTS_LIVE_POOL_COMPANY_ID } from '../../live-source/live-discovery'
-
-/**
- * Phase 15A: shared pool-aware label, identical to the detail page. Both pool
- * markers (TED/FTS and Grants.gov runs) share the value 'RUN'; either constant
- * matches every pooled item.
- */
-function companyLabelFor(entry: ReviewItem): string {
-  return companyLabelForReview(entry.companyId, FTS_LIVE_POOL_COMPANY_ID)
-}
+import { listAssociations } from '../../live-source/company-associations'
 
 /** Phase 05 section split helper: canonical domain, never title text. */
 function sectionFor(entry: ReviewItem): ReviewSectionKey {
@@ -110,9 +101,15 @@ const SECTION_PAGE_PARAM: Record<ReviewSectionKey, string> = {
 export default function ReviewQueue({
   domainFilter,
   title = 'Human review',
+  fixedStatus,
+  basePath = '/discovery',
+  workspaceView = 'human-review',
 }: {
   domainFilter?: DiscoveryDomain
   title?: string
+  fixedStatus?: ReviewStatus
+  basePath?: string
+  workspaceView?: string
 }) {
   const [params] = useSearchParams()
   const legacyStatus = params.get('status')
@@ -124,13 +121,11 @@ export default function ReviewQueue({
   // stay ephemeral.
   const [, forceRender] = useReducer((version: number) => version + 1, 0)
   useEffect(() => {
-    const uninstallPersistence = installReviewPersistence()
     const unsubscribeTick = reviewFixtureStore.subscribe(() => {
       forceRender()
     })
     forceRender()
     return () => {
-      uninstallPersistence()
       unsubscribeTick()
     }
   }, [])
@@ -200,6 +195,9 @@ export default function ReviewQueue({
               statusSlug={params.get(SECTION_STATUS_PARAM.funding) ?? legacyStatus}
               page={pageFromParam(params.get(SECTION_PAGE_PARAM.funding))}
               demo={source.demo}
+              basePath={basePath}
+              workspaceView={workspaceView}
+              fixedStatus={fixedStatus}
             />
           ) : null}
           {domainFilter === undefined || domainFilter === 'procurement' ? (
@@ -209,6 +207,9 @@ export default function ReviewQueue({
               statusSlug={params.get(SECTION_STATUS_PARAM.procurement) ?? legacyStatus}
               page={pageFromParam(params.get(SECTION_PAGE_PARAM.procurement))}
               demo={source.demo}
+              basePath={basePath}
+              workspaceView={workspaceView}
+              fixedStatus={fixedStatus}
             />
           ) : null}
           {domainFilter === undefined ? (
@@ -218,11 +219,14 @@ export default function ReviewQueue({
               statusSlug={params.get(SECTION_STATUS_PARAM.unclassified) ?? legacyStatus}
               page={pageFromParam(params.get(SECTION_PAGE_PARAM.unclassified))}
               demo={source.demo}
+              basePath={basePath}
+              workspaceView={workspaceView}
+              fixedStatus={fixedStatus}
             />
           ) : (
             <p className="dg-note" role="note">
               Records that are neither funding nor procurement stay visible under Unclassified
-              on the <Link to="/review">full Human review queue</Link>.
+              on the <Link to="/discovery?view=human-review">full Human review queue</Link>.
             </p>
           )}
         </>
@@ -237,6 +241,9 @@ function ReviewSection({
   statusSlug,
   page,
   demo,
+  basePath,
+  workspaceView,
+  fixedStatus,
 }: {
   section: ReviewSectionKey
   items: readonly ReviewItem[]
@@ -244,13 +251,16 @@ function ReviewSection({
   statusSlug: string | null
   page: number
   demo: boolean
+  basePath: string
+  workspaceView: string
+  fixedStatus?: ReviewStatus
 }) {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const meta = SECTION_META[section]
   const statusParam = SECTION_STATUS_PARAM[section]
 
-  const filter = resolveReviewFilter(statusSlug)
+  const filter = fixedStatus ?? resolveReviewFilter(statusSlug)
   const pageParam = SECTION_PAGE_PARAM[section]
   // Phase 15B: the run scope (if any) travels to detail pages for back-links.
   const runScope = params.get('run')
@@ -261,29 +271,33 @@ function ReviewSection({
 
   function goToPage(next: number): void {
     const query = new URLSearchParams(params.toString())
+    query.set('view', workspaceView)
     if (next <= 1) query.delete(pageParam)
     else query.set(pageParam, String(next))
     const qs = query.toString()
-    navigate(qs ? `/review?${qs}` : '/review')
+    navigate(qs ? `${basePath}?${qs}` : basePath)
   }
 
   return (
     <section aria-label={meta.title} data-testid={`review-section-${section}`}>
       <h2 className="dg-subtitle">{meta.title}</h2>
       <p className="dg-note">{meta.blurb}</p>
-      <div className="rv-filters">
-        <SegmentedTabs
-          label={`${meta.title} filter`}
-          current={statusSlug ?? 'needs-review'}
-          segments={REVIEW_FILTERS.map((f) => {
-            const query = new URLSearchParams(params.toString())
-            query.set(statusParam, f.slug)
-            query.delete(pageParam)
-            const qs = query.toString()
-            return { key: f.slug, label: f.label, to: qs ? `/review?${qs}` : '/review' }
-          })}
-        />
-      </div>
+      {fixedStatus === undefined ? (
+        <div className="rv-filters">
+          <SegmentedTabs
+            label={`${meta.title} filter`}
+            current={statusSlug ?? 'needs-review'}
+            segments={REVIEW_FILTERS.map((f) => {
+              const query = new URLSearchParams(params.toString())
+              query.set('view', workspaceView)
+              query.set(statusParam, f.slug)
+              query.delete(pageParam)
+              const qs = query.toString()
+              return { key: f.slug, label: f.label, to: `${basePath}?${qs}` }
+            })}
+          />
+        </div>
+      ) : null}
       <p className="dg-note" data-testid={`review-counts-${section}`}>
         {items.length} {items.length === 1 ? 'item' : 'items'}
         {REVIEW_STATUSES.map((status) => ` · ${counts[status]} ${status.toLowerCase().replace('_', ' ')}`).join('')}
@@ -314,7 +328,13 @@ function ReviewSection({
               </thead>
               <tbody>
                 {pageItems.map((entry) => (
-                  <ReviewRow key={entry.reviewId} entry={entry} demo={demo} runId={runScope} />
+                  <ReviewRow
+                    key={entry.reviewId}
+                    entry={entry}
+                    demo={demo}
+                    runId={runScope}
+                    workspaceView={workspaceView}
+                  />
                 ))}
               </tbody>
             </table>
@@ -351,17 +371,30 @@ function ReviewSection({
   )
 }
 
-function ReviewRow({ entry, demo, runId }: { entry: ReviewItem; demo: boolean; runId: string | null }) {
+function ReviewRow({
+  entry,
+  demo,
+  runId,
+  workspaceView,
+}: {
+  entry: ReviewItem
+  demo: boolean
+  runId: string | null
+  workspaceView: string
+}) {
   const published = publicationDateOf(entry)
   const deadline = deadlineOf(entry)
   const duplicate = entry.duplicate?.verdict !== 'DISTINCT' ? entry.duplicate : null
   // Phase 15B: preserve the run scope so the detail page can link back to the
   // exact historical run and its run-scoped queue.
   const detailQuery = new URLSearchParams()
+  detailQuery.set('view', workspaceView)
   if (demo) detailQuery.set(REVIEW_DEMO_PARAM, REVIEW_DEMO_VALUE)
   if (runId !== null && runId.trim() !== '') detailQuery.set('run', runId.trim())
   const detailQueryString = detailQuery.toString()
-  const detailPath = `/review/${encodeURIComponent(entry.reviewId)}${detailQueryString ? `?${detailQueryString}` : ''}`
+  const detailPath = `/discovery/review/${encodeURIComponent(entry.reviewId)}${detailQueryString ? `?${detailQueryString}` : ''}`
+  const association = listAssociations().find((item) => item.reviewId === entry.reviewId)
+  const companyId = association?.companyId ?? entry.companyId
   return (
     <tr>
       <td data-label="Candidate">
@@ -371,7 +404,7 @@ function ReviewRow({ entry, demo, runId }: { entry: ReviewItem; demo: boolean; r
           </Link>
         </span>
       </td>
-      <td data-label="Company">{companyLabelFor(entry)}</td>
+      <td data-label="Company">{companyLabelForReview(companyId, FTS_LIVE_POOL_COMPANY_ID)}</td>
       <td data-label="Domain">{entry.domain === 'funding' ? 'Funding' : 'Procurement'}</td>
       <td data-label="Type">{rfpDisplay(entry.classification?.type) ?? '—'}</td>
       <td data-label="Source">{entry.provenance.sourceName ?? entry.sourceId}</td>

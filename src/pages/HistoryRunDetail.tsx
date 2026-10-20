@@ -33,7 +33,7 @@ export default function HistoryRunDetail() {
             removes it. No run was rerun and nothing was guessed.
           </p>
           <p>
-            <Link to="/history" className="btn">
+            <Link to="/discovery" className="btn">
               Back to run history
             </Link>
           </p>
@@ -46,7 +46,7 @@ export default function HistoryRunDetail() {
   return (
     <section className="page">
       <nav className="crumbs" aria-label="Back">
-        <Link to="/history">Run history</Link>
+        <Link to="/discovery">Discovery</Link>
       </nav>
       <header className="page__header">
         <h1 className="page__title">

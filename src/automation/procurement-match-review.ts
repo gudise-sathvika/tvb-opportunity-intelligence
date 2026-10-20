@@ -50,6 +50,7 @@ export interface ProcurementMatchReviewItem {
   /** The Phase Q proposal under review — carried verbatim, never mutated. */
   proposal: ProcurementMatchProposal
   noticeName: string | null
+  noticeSourceUrl: string | null
   companyName: string | null
   reviewStatus: ProcurementMatchReviewStatus
   audit: readonly ProcurementMatchReviewAuditEntry[]
@@ -59,6 +60,7 @@ export interface ProcurementMatchReviewItem {
 
 export interface ProcurementMatchReviewItemOptions {
   noticeName?: string | null
+  noticeSourceUrl?: string | null
   companyName?: string | null
   /** Explicit creation timestamp — the caller supplies it; this module runs no clock. */
   createdAt: string
@@ -106,6 +108,7 @@ export function createProcurementMatchReviewItem(
   return deepFreeze({
     proposal,
     noticeName: options.noticeName ?? null,
+    noticeSourceUrl: options.noticeSourceUrl ?? null,
     companyName: options.companyName ?? null,
     reviewStatus: 'PENDING' as const,
     audit: deepFreeze([]),

@@ -12,14 +12,16 @@ import {
 } from '../data/selectors'
 import { applicationFilters } from '../data/funding-options'
 import { filterApplications } from '../data/funding-filters'
+import TargetApplicationTracker from '../components/target-companies/TargetApplicationTracker'
 
 export default function ApplicationsPage() {
   const filters = useMemo(() => applicationFilters(), [])
 
   return (
-    <RecordListPage
+    <>
+      <RecordListPage
       title="Applications"
-      description="Application records. Applications are tracked here, not filed — there is no submission or status-changing capability."
+      description="Persisted application records from the Vault snapshot, plus browser-persisted pursuits started from reviewed funding matches. A tracked application is not represented as submitted unless you update its status."
       records={listApplications()}
       searchPlaceholder="Search ID, status, currency, next action…"
       filters={filters}
@@ -110,5 +112,7 @@ export default function ApplicationsPage() {
         },
       ]}
     />
+      <TargetApplicationTracker opportunityType="funding" />
+    </>
   )
 }

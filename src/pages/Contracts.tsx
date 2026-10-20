@@ -38,6 +38,8 @@ import {
  * filter so a reader can restrict to one before looking at amounts, never as a
  * grouping that adds them together.
  */
+import TargetContractTracker from '../components/target-companies/TargetContractTracker'
+
 export default function Contracts() {
   const contracts = listContracts()
 
@@ -135,7 +137,8 @@ export default function Contracts() {
   )
 
   return (
-    <RecordListPage
+    <>
+      <RecordListPage
       title="Contracts"
       description="What we are obliged to deliver once we have won: the buyer's reference, the value in its own currency, the term, and where delivery, acceptance, and payment each stand. The four status columns are independent and are expected to disagree. The award date is not here — it stays on the Bid, which owns the competitive outcome. No total value is shown or offered, because these records are denominated in more than one currency and adding across currencies would produce a meaningless number."
       records={contracts}
@@ -318,5 +321,7 @@ export default function Contracts() {
         },
       ]}
     />
+      <TargetContractTracker />
+    </>
   )
 }

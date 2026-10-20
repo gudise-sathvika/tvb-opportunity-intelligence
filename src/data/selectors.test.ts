@@ -62,7 +62,7 @@ import {
 import { COMPANY_DIRECTORY_NAMES } from './company-directory-names'
 import type { CollectionKey } from './selectors'
 import { COLLECTION_KEY, RECORD_REGISTRY, RECORD_TYPES, TITLE_FIELD } from '../types/registry'
-import { primaryLink, supportingLinks, utilityDropdowns, workspaceDropdowns } from '../app/nav'
+import { primaryLink, supportingLinks } from '../app/nav'
 
 /* ------------------------------------------------------------------ */
 /* Collections and counts                                               */
@@ -271,21 +271,18 @@ test('collectionOf maps each record type to its collection', () => {
   assert.equal(collectionOf('MISSING'), undefined)
 })
 
-test('pathForRecord builds a routable path for every collection', () => {
-  assert.equal(pathForRecord('OPP-001'), '/opportunities/OPP-001')
+test('pathForRecord only exposes retained company detail routes', () => {
+  assert.equal(pathForRecord('OPP-001'), null)
   assert.equal(pathForRecord('COMP-001'), '/companies/COMP-001')
-  assert.equal(pathForRecord('MATCH-001'), '/matches/MATCH-001')
-  assert.equal(pathForRecord('APP-001'), '/applications/APP-001')
-  assert.equal(pathForRecord('ORG-001'), '/organizations/ORG-001')
-  assert.equal(pathForRecord('SRC-001'), '/sources/SRC-001')
-  // No malformed plural: this is the "opportunitys" regression guard.
-  assert.ok(!pathForRecord('OPP-001')?.includes('opportunitys'))
-  assert.ok(!pathForRecord('COMP-001')?.includes('companys'))
+  assert.equal(pathForRecord('MATCH-001'), null)
+  assert.equal(pathForRecord('APP-001'), null)
+  assert.equal(pathForRecord('ORG-001'), null)
+  assert.equal(pathForRecord('SRC-001'), null)
   assert.equal(pathForRecord('MISSING'), null)
 })
 
-test('every record path is reachable and resolves back to itself', () => {
-  for (const r of COLLECTION_KEYS.flatMap((k) => listRecords(k))) {
+test('every retained company detail path resolves back to its company', () => {
+  for (const r of listRecords('companies')) {
     const p = pathForRecord(r.id)
     assert.ok(p, `${r.id} has no path`)
     const idFromPath = p?.split('/')[2]
@@ -627,14 +624,13 @@ test('a record ID whose prefix disagrees with its type resolves to no collection
   assert.equal(collectionOf(real?.id ?? ''), 'companies')
 })
 
-test('pathForRecord is built from the registry path, not a pluralised guess', () => {
+test('pathForRecord creates detail links only for retained company records', () => {
   for (const key of COLLECTION_KEYS) {
     for (const rec of listRecords(key)) {
-      assert.equal(pathForRecord(rec.id), `/${COLLECTION_PATH[key]}/${rec.id}`)
+      assert.equal(pathForRecord(rec.id), key === 'companies' ? `/companies/${rec.id}` : null)
     }
   }
   assert.equal(pathForRecord('NOPE-001'), null)
-  assert.notEqual(pathForRecord('OPP-001'), '/opportunitys/OPP-001')
 })
 
 test('titleOf uses the registry title field for every type', () => {
@@ -647,72 +643,26 @@ test('titleOf uses the registry title field for every type', () => {
 })
 
 /* ------------------------------------------------------------------ */
-/* Top navigation (Phase Z) — the model the header renders.            */
+/* Top navigation — the only retained product sections.                 */
 /* ------------------------------------------------------------------ */
 
-test('top navigation is Home, the two workspaces, Companies, and More', () => {
-  // One primary link, two workspace groups, one primary supporting link, and
-  // one utility group. The header renders exactly this model, so these
-  // assertions describe the navigation the user actually sees rather than a
-  // second hand-written copy.
-  assert.deepEqual(primaryLink, { to: '/', label: 'Home', end: true })
-  assert.deepEqual(
-    workspaceDropdowns.map((d) => d.id),
-    ['funding', 'procurement'],
-  )
-  assert.deepEqual(
-    workspaceDropdowns.map((d) => d.label),
-    ['Funding', 'Procurement'],
-  )
-  assert.equal(workspaceDropdowns[0].to, '/funding')
-  assert.equal(workspaceDropdowns[1].to, '/procurement')
+test('top navigation contains only Discovery and Companies', () => {
+  assert.deepEqual(primaryLink, { to: '/discovery', label: 'Discovery' })
   assert.deepEqual(
     supportingLinks.map((l) => l.to),
     ['/companies'],
   )
-  assert.deepEqual(
-    utilityDropdowns.map((d) => d.id),
-    ['more'],
-  )
 })
 
-test('the funding workspace is overview, opportunities, matches, and applications', () => {
-  const funding = workspaceDropdowns.find((d) => d.id === 'funding')!
-  assert.deepEqual(
-    funding.items.map((i) => i.label),
-    ['Overview', 'Opportunities', 'Matches', 'Applications'],
-  )
-  assert.equal(funding.items.find((i) => i.label === 'Overview')!.to, '/funding')
-  assert.equal(funding.items.find((i) => i.label === 'Opportunities')!.to, '/opportunities')
-  assert.equal(funding.items.find((i) => i.label === 'Matches')!.to, '/matches')
-  assert.equal(funding.items.find((i) => i.label === 'Applications')!.to, '/applications')
-  // Overview matches exactly, so a `?view=` collection URL is not claimed by it.
-  assert.equal(funding.items.find((i) => i.label === 'Overview')!.end, true)
-})
-
-test('the procurement workspace is overview, RFPs, matches, bids, and contracts', () => {
-  const procurement = workspaceDropdowns.find((d) => d.id === 'procurement')!
-  assert.deepEqual(
-    procurement.items.map((i) => i.label),
-    ['Overview', 'RFPs', 'Matches', 'Bids', 'Contracts'],
-  )
-  assert.equal(procurement.items.find((i) => i.label === 'Overview')!.to, '/procurement')
-  assert.equal(procurement.items.find((i) => i.label === 'RFPs')!.to, '/notices')
-  assert.equal(procurement.items.find((i) => i.label === 'Matches')!.to, '/procurement-match-review')
-  assert.equal(procurement.items.find((i) => i.label === 'Bids')!.to, '/bids')
-  assert.equal(procurement.items.find((i) => i.label === 'Contracts')!.to, '/contracts')
-  assert.equal(procurement.items.find((i) => i.label === 'Overview')!.end, true)
-})
-
-test('subprocesses are reachable but never top-level destinations', () => {
-  // Review, Discovery, Match Review, Organizations, and Sources must not sit
-  // in the primary row. Organizations and Sources are one menu away behind
-  // More; the review and discovery queues hang off the workspaces themselves
-  // (workspace bar, overview flow strip, and in-context links).
+test('review subviews are nested under Discovery, never top-level destinations', () => {
   const topLevel = new Set([primaryLink.to, ...supportingLinks.map((l) => l.to)])
   for (const hidden of [
     '/review',
-    '/discovery',
+    '/funding',
+    '/procurement',
+    '/applications',
+    '/bids',
+    '/contracts',
     '/match-review',
     '/procurement-match-review',
     '/organizations',
@@ -720,9 +670,7 @@ test('subprocesses are reachable but never top-level destinations', () => {
   ]) {
     assert.ok(!topLevel.has(hidden), `${hidden} is not a top-level destination`)
   }
-  const utility = utilityDropdowns.flatMap((d) => d.items.map((i) => i.to))
-  assert.ok(utility.includes('/organizations'), 'Organizations is reachable behind More')
-  assert.ok(utility.includes('/sources'), 'Sources is reachable behind More')
+  assert.ok(topLevel.has('/discovery'), 'Discovery is a primary destination')
 })
 
 test('the supporting link maps to a registry collection', () => {
@@ -735,16 +683,7 @@ test('the supporting link maps to a registry collection', () => {
   assert.equal(new Set(supportingLinks.map((l) => l.to)).size, supportingLinks.length)
 })
 
-test('every dropdown group explains what its items are for', () => {
-  for (const group of [...workspaceDropdowns, ...utilityDropdowns]) {
-    assert.ok(group.label.length > 0, group.id + ' is named')
-    for (const item of group.items) {
-      assert.ok(item.description.length > 0, item.to + ' explains itself')
-    }
-  }
-})
-
-test('Home stays the primary overview entry', () => {
-  assert.equal(primaryLink.to, '/')
-  assert.equal(primaryLink.label, 'Home')
+test('Companies is the only supporting top-level section', () => {
+  assert.deepEqual(supportingLinks, [{ to: '/companies', label: 'Companies' }])
+  assert.equal(primaryLink.label, 'Discovery')
 })

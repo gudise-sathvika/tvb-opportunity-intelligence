@@ -8,9 +8,8 @@
  * error states instead of guessing.
  */
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { installReviewPersistence } from '../../live-source/review-persistence'
 import {
   loadWorkspace,
   setChecklistState,
@@ -33,13 +32,6 @@ export default function PreparationWorkspaceView({ reviewId }: { reviewId: strin
   const [notesDraft, setNotesDraft] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   void refresh
-  // Phase 33: restore persisted review state on direct entry (e.g. after reload).
-  useEffect(() => {
-    const uninstall = installReviewPersistence()
-    setRefresh((version) => version + 1)
-    return uninstall
-  }, [reviewId])
-
   const loaded = loadWorkspace(reviewId.trim())
   if (!loaded.ok) {
     return (

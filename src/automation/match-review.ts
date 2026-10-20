@@ -47,6 +47,7 @@ export interface MatchReviewItem {
   proposal: MatchProposal
   companyName: string | null
   sourceName: string | null
+  sourceUrl: string | null
   reviewStatus: MatchReviewStatus
   audit: readonly MatchReviewAuditEntry[]
   createdAt: string
@@ -56,6 +57,7 @@ export interface MatchReviewItem {
 export interface MatchReviewItemOptions {
   companyName?: string | null
   sourceName?: string | null
+  sourceUrl?: string | null
   /** Explicit creation timestamp — the caller supplies it; this module runs no clock. */
   createdAt: string
 }
@@ -100,6 +102,7 @@ export function createMatchReviewItem(proposal: MatchProposal, options: MatchRev
     proposal,
     companyName: options.companyName ?? null,
     sourceName: options.sourceName ?? null,
+    sourceUrl: options.sourceUrl ?? null,
     reviewStatus: 'PENDING' as const,
     audit: deepFreeze([]),
     createdAt: options.createdAt,

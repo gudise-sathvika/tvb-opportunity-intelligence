@@ -8,6 +8,13 @@
 
 import ReviewQueue from '../components/review/ReviewQueue'
 
+import { Link } from 'react-router-dom'
+
 export default function FundingReview() {
-  return <ReviewQueue domainFilter="funding" title="Funding review" />
+  return (
+    <>
+      <Link to="/review" className="btn">Review Candidates</Link>
+      <ReviewQueue domainFilter="funding" title="Funding review" />
+    </>
+  )
 }

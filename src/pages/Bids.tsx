@@ -47,6 +47,8 @@ import {
  * did not reach award shows `none`, because producing nothing is a fact about the
  * bid rather than missing data.
  */
+import TargetApplicationTracker from '../components/target-companies/TargetApplicationTracker'
+
 export default function Bids() {
   const today = todayISO()
   const bids = listBids()
@@ -117,7 +119,8 @@ export default function Bids() {
   )
 
   return (
-    <RecordListPage
+    <>
+      <RecordListPage
       title="Bids"
       description="Our pursuit of each procurement notice: whether we may bid, whether we chose to, and where the bid stands. A bid is our own response to a buyer's notice, not the notice itself and not a contract. The three status columns are independent and are expected to disagree: there is no combined verdict and no single bid status, and no win rate or attractiveness score is shown, because four records from one invented buyer cannot support one."
       records={bids}
@@ -272,5 +275,7 @@ export default function Bids() {
         },
       ]}
     />
+      <TargetApplicationTracker opportunityType="procurement" />
+    </>
   )
 }

@@ -28,7 +28,7 @@ export default function RunHistory({ runs }: { runs: readonly DiscoveryRunOutcom
               <span className={`dg-chip dg-chip--${COMPANY_STATE_FOR_OUTCOME[run.outcome]}`}>
                 {OUTCOME_LABEL[run.outcome]}
               </span>
-              <Link to={`/history/${encodeURIComponent(run.runId)}`}>Open run detail</Link>
+              <Link to={`/discovery/history/${encodeURIComponent(run.runId)}`}>Open run detail</Link>
             </li>
           ))}
         </ul>

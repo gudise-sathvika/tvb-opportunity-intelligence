@@ -318,7 +318,7 @@ export function parseGrantsGovBody(body: string, context: GrantsGovParseContext)
       sourceRecordId: id,
       sourceUrl,
       title: displayTitle,
-      description: number,
+      description: firstString(entry['description']),
       publicationDate: normalizeGrantsGovDate(entry['openDate']),
       deadline: normalizeGrantsGovDate(entry['closeDate']),
       issuingOrganization: firstString(entry['agency']) ?? firstString(entry['agencyName']) ?? firstString(entry['agencyCode']),

@@ -1,5 +1,9 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { loadImportedTargetCompanies } from '../../target-companies/store'
+import { csvPreviewToTargetCompanies } from '../../target-companies/profiles'
+import { recommendOpportunitiesForTargetCompanies } from '../../target-companies/recommendations'
+import type { TargetOpportunityInput } from '../../target-companies/matching'
 import type { DiscoveryCandidate } from '../../automation/candidate'
 import type { DiscoveryCompanyResult, DiscoveryRunOutcome } from '../../automation/discovery-fixture'
 import {
@@ -96,7 +100,7 @@ function grantsGovNote(outcome: DiscoveryRunOutcome): string {
       ? 'This run queried the real Grants.gov source. A blank keyword runs ONE broad search of posted opportunities for the whole run; the same source pool is shown for every selected company and is NOT company-matched.'
       : `This run queried the real Grants.gov source. The keyword “${outcome.keyword}” is searched ONCE for the run and the same results are shown for every selected company (not company-matched).`
   const tail =
-    'Each opportunity shows its agency, status, close date, and official link; the open-opportunity gate marks a record Open (confirmed) only when the status is posted, the close date is in the future, the URL is official, and provenance is present. Review items are produced per company run.'
+    'Each opportunity shows its agency, status, close date, and official link; the open-opportunity gate marks a record Open (confirmed) only when the status is posted, the close date is in the future, the URL is official, and provenance is present. Canonical review items are handed off once per run.'
   return `${lead} ${tail}`
 }
 
@@ -113,12 +117,12 @@ function liveProcurementNote(outcome: DiscoveryRunOutcome): string {
   const ted = queried.has(TED_SOURCE_ID)
   const fts = queried.has(FTS_SOURCE_ID)
   if (ted && fts) {
-    return 'This run queried the real TED source. It also queried the real UK Find a Tender Service (one broad latest-notices search per run, shared by all selected companies). Each listing is stored once per company run, and review items land in the Human review queue.'
+    return 'This run queried the real TED source. It also queried the real UK Find a Tender Service (one broad latest-notices search per run, shared by all selected companies). Canonical listings and review items are shown once per run.'
   }
   if (ted) {
-    return 'This run queried the real TED source. Each listing is stored once per company run, and review items land in the Human review queue.'
+    return 'This run queried the real TED source. Canonical listings and review items are shown once per run.'
   }
-  return 'This run did not query TED (no procurement keyword was entered) and queried the real UK Find a Tender Service (one broad latest-notices search per run, shared by all selected companies). Each listing is stored once per company run, and review items land in the Human review queue.'
+  return 'This run did not query TED (no procurement keyword was entered) and queried the real UK Find a Tender Service (one broad latest-notices search per run, shared by all selected companies). Canonical listings and review items are shown once per run.'
 }
 
 /** Phase U: marks whether a run's source is a real verified source or a fixture. */
@@ -173,7 +177,7 @@ function euSediaNote(outcome: DiscoveryRunOutcome): string {
       ? 'This run queried the real EU Funding & Tenders Portal. A blank keyword runs ONE broad search of requested grant topics and cascade funding calls for the whole run; the same source pool is shown for every selected company and is NOT company-matched.'
       : `This run queried the real EU Funding & Tenders Portal. The keyword “${outcome.keyword}” is searched ONCE for the run and the same results are shown for every selected company (not company-matched).`
   const tail =
-    'Each record shows its award type, source status, deadline, and official EU link; the open-call gate marks a record Open (confirmed) only when the status is open for submission, the deadline is in the future, the link is official, and provenance is present. Tenders (type 0) are not requested in this phase. Review items are produced per company run.'
+    'Each record shows its award type, source status, deadline, and official EU link; the open-call gate marks a record Open (confirmed) only when the status is open for submission, the deadline is in the future, the link is official, and provenance is present. Tenders (type 0) are not requested in this phase. Canonical review items are handed off once per run.'
   return `${lead} ${tail}`
 }
 
@@ -262,11 +266,11 @@ function OpportunityChip({ state, reason, asOf }: { state: OpportunityState; rea
 function OpportunityCandidates({
   candidates,
   now,
-  sourceId,
+  companyContexts,
 }: {
   candidates: readonly DiscoveryCandidate[]
   now: string
-  sourceId: string
+  companyContexts: ReadonlyMap<string, readonly string[]>
 }) {
   const ordered = [...candidates].sort((a, b) => {
     const ra = classifyOpportunityState(a, now).state === 'open' ? 0 : 1
@@ -282,14 +286,28 @@ function OpportunityCandidates({
             <a className="dg-candidate__title" href={candidate.sourceUrl} target="_blank" rel="noreferrer">
               {candidate.sourceTitle}
             </a>
+            {companyContexts.get(candidateIdentity(candidate))?.length ? (
+              <span className="dg-candidate__meta">
+                Search context (not a company match):{' '}
+                {companyContexts.get(candidateIdentity(candidate))?.slice(0, 5).join(', ')}
+                {(companyContexts.get(candidateIdentity(candidate))?.length ?? 0) > 5
+                  ? ` and ${(companyContexts.get(candidateIdentity(candidate))?.length ?? 0) - 5} more`
+                  : ''}
+              </span>
+            ) : null}
             <span className="dg-candidate__meta">
-              {candidate.sourceOrganization ? `${candidate.sourceOrganization} · ` : ''}
+              <code>{candidate.sourceId}</code>
+              {candidate.sourceRecordId ? ` · ${candidate.sourceRecordId}` : ''}
+              {candidate.sourceOrganization ? ` · ${candidate.sourceOrganization}` : ''}
+              {candidate.sourcePublicationDate ? ` · published ${candidate.sourcePublicationDate}` : ''}
+              {candidate.provenance.runId ? ` · run ${candidate.provenance.runId}` : ''}
+              {' · '}
               {candidate.sourceRawType ?? 'UNKNOWN'} · status {candidate.sourceStatus ?? 'unknown'} · deadline{' '}
               {candidate.sourceDeadline ?? '—'}
             </span>
             <OpportunityEvidence candidate={candidate} />
             <a className="dg-candidate__link" href={candidate.sourceUrl} target="_blank" rel="noreferrer">
-              {LINK_LABEL[sourceId] ?? 'Official record'}
+              {LINK_LABEL[candidate.sourceId] ?? 'Official record'}
               {candidate.sourceLinkValidation === 'constructed-unverified' ? ' — destination unverified' : ''}
             </a>
             {candidate.sourceLinkValidation === 'constructed-unverified' ? (
@@ -306,7 +324,15 @@ function OpportunityCandidates({
 }
 
 /** Phase 23: records that FAILED the ingest gate — preserved, never presented as open. */
-function ExcludedCandidates({ candidates, now }: { candidates: readonly DiscoveryCandidate[]; now: string }) {
+function ExcludedCandidates({
+  candidates,
+  now,
+  companyContexts,
+}: {
+  candidates: readonly DiscoveryCandidate[]
+  now: string
+  companyContexts: ReadonlyMap<string, readonly string[]>
+}) {
   if (candidates.length === 0) return null
   return (
     <details className="dg-excluded" data-testid="excluded-candidates">
@@ -317,10 +343,27 @@ function ExcludedCandidates({ candidates, now }: { candidates: readonly Discover
           return (
             <li key={candidate.candidateId} className="dg-candidate">
               <span className="dg-candidate__title">{candidate.sourceTitle}</span>
+              {companyContexts.get(candidateIdentity(candidate))?.length ? (
+                <span className="dg-candidate__meta">
+                  Search context (not a company match):{' '}
+                  {companyContexts.get(candidateIdentity(candidate))?.slice(0, 5).join(', ')}
+                  {(companyContexts.get(candidateIdentity(candidate))?.length ?? 0) > 5
+                    ? ` and ${(companyContexts.get(candidateIdentity(candidate))?.length ?? 0) - 5} more`
+                    : ''}
+                </span>
+              ) : null}
               <span className="dg-candidate__meta">
+                <code>{candidate.sourceId}</code>
+                {candidate.sourceRecordId ? ` · ${candidate.sourceRecordId}` : ''}
+                {' · '}
                 {candidate.sourceRawType ?? 'UNKNOWN'} · status {candidate.sourceStatus ?? 'unknown'} · deadline{' '}
                 {candidate.sourceDeadline ?? '—'}
               </span>
+              {candidate.sourceUrl ? (
+                <a className="dg-candidate__link" href={candidate.sourceUrl} target="_blank" rel="noreferrer">
+                  {LINK_LABEL[candidate.sourceId] ?? 'Official record'}
+                </a>
+              ) : null}
               <OpportunityChip state={verdict.state} reason={verdict.reason} asOf={now} />
             </li>
           )
@@ -340,11 +383,81 @@ function runSourceId(outcome: DiscoveryRunOutcome): string | null {
   return null
 }
 
+function uniqueCandidates(candidates: readonly DiscoveryCandidate[]): DiscoveryCandidate[] {
+  const byIdentity = new Map<string, DiscoveryCandidate>()
+  for (const candidate of candidates) {
+    const identity = candidateIdentity(candidate)
+    if (!byIdentity.has(identity)) byIdentity.set(identity, candidate)
+  }
+  return [...byIdentity.values()]
+}
+
+function candidateIdentity(candidate: DiscoveryCandidate): string {
+  const recordId = candidate.sourceRecordId?.trim()
+  const stableSourceKey =
+    recordId || candidate.normalization?.canonicalUrl?.trim() || candidate.sourceUrl.trim() || candidate.candidateId
+  return `${candidate.sourceId}:${stableSourceKey}`
+}
+
+function companyContextsFor(
+  companies: readonly DiscoveryCompanyResult[],
+): ReadonlyMap<string, readonly string[]> {
+  const contexts = new Map<string, Set<string>>()
+  for (const company of companies) {
+    for (const candidate of [
+      ...company.candidates,
+      ...(company.actionableCandidates ?? []),
+      ...(company.excludedCandidates ?? []),
+    ]) {
+      const identity = candidateIdentity(candidate)
+      const names = contexts.get(identity) ?? new Set<string>()
+      names.add(companyNameFor(company.companyId))
+      contexts.set(identity, names)
+    }
+  }
+  return new Map([...contexts].map(([identity, names]) => [identity, [...names]]))
+}
+
 export default function DiscoveryResults({ outcome }: { outcome: DiscoveryRunOutcome }) {
   const isLiveFunding = outcome.scenario === 'live' && outcome.domain === 'funding'
   const banner = isLiveFunding ? liveFundingBanner(outcome) : null
   const sourceId = runSourceId(outcome)
   const isHistoricalSource = sourceId === USA_SPENDING_SOURCE_ID
+  const companyContexts = companyContextsFor(outcome.companies)
+
+  const importedPreview = loadImportedTargetCompanies()
+  const targetCompanies = importedPreview ? csvPreviewToTargetCompanies(importedPreview) : []
+  const actionableCandidates = uniqueCandidates(
+    outcome.companies.flatMap((company) => company.actionableCandidates ?? company.candidates),
+  )
+  const actionableIdentities = new Set(actionableCandidates.map(candidateIdentity))
+  const excludedCandidates = uniqueCandidates(outcome.companies.flatMap((company) => company.excludedCandidates ?? []))
+    .filter((candidate) => !actionableIdentities.has(candidateIdentity(candidate)))
+  const targetOpportunities: TargetOpportunityInput[] = actionableCandidates.map((candidate) => ({
+    opportunityId: candidate.candidateId,
+    opportunityType: outcome.domain === 'funding' ? 'funding' : 'procurement',
+    title: candidate.sourceTitle,
+    description: candidate.sourceSummary ?? candidate.sourceOrganization ?? null,
+    country: null,
+    sectors: candidate.sourceEvidence?.sectors ?? null,
+    requirements: candidate.sourceEvidence?.lifecycleNotes ?? null,
+    applicantTypes: null,
+    deadline: candidate.sourceDeadline,
+    status: candidate.sourceStatus,
+    sourceUrl: candidate.sourceUrl,
+  }))
+  const targetRecommendations =
+    targetCompanies.length > 0 && targetOpportunities.length > 0
+      ? recommendOpportunitiesForTargetCompanies(targetCompanies, targetOpportunities)
+      : []
+  const recommendationsByOpportunity = new Map<string, typeof targetRecommendations>()
+  for (const recommendation of targetRecommendations) {
+    const group = recommendationsByOpportunity.get(recommendation.opportunityId) ?? []
+    group.push(recommendation)
+    recommendationsByOpportunity.set(recommendation.opportunityId, group)
+  }
+  const recommendationGroups = [...recommendationsByOpportunity.values()]
+
   return (
     <section className="card dg-panel" aria-label="Discovery result">
       <h2 className="dg-panel__title">Run result</h2>
@@ -367,13 +480,13 @@ export default function DiscoveryResults({ outcome }: { outcome: DiscoveryRunOut
       <p className="dg-note">
         {outcome.scenario === 'live' && outcome.domain === 'funding'
           ? banner !== null && banner.sourceId === USA_SPENDING_SOURCE_ID
-            ? 'This run queried the real USAspending source: official public US federal spending data. Results are federal award records — obligated grants, not open grant solicitations. Each award is stored once per company run, and review items land in the Human review queue.'
+            ? 'This run queried the real USAspending source: official public US federal spending data. Results are federal award records — obligated grants, not open grant solicitations. Canonical award records and review items are shown once per run.'
             : banner !== null && banner.sourceId === EU_SEDIA_SOURCE_ID
               ? euSediaNote(outcome)
               : grantsGovNote(outcome)
           : outcome.scenario === 'live'
             ? liveProcurementNote(outcome)
-            : 'Findings come from the local scenario sources only. A listing found for several companies stays listed once per company run, and review items land in the Human review queue.'}
+            : 'Findings come from the local scenario sources only. A listing found by several company searches is shown once per run, and canonical review items land in the Human review queue.'}
       </p>
 
       <AutomationWorkflow outcome={outcome} />
@@ -420,27 +533,11 @@ export default function DiscoveryResults({ outcome }: { outcome: DiscoveryRunOut
                   </ul>
                   {company.candidates.length === 0 ? (
                     <p className="dg-empty">{emptyMessage(company)}</p>
-                  ) : hasOpportunityRecords ? (
-                    <>
-                      {isHistoricalSource ? (
-                        <p className="dg-note" role="note">
-                          Historical context — obligated federal award records, NOT open grant solicitations.
-                          This shows what has already been awarded, not what is available to apply for.
-                        </p>
-                      ) : null}
-                      <OpportunityCandidates
-                        candidates={company.actionableCandidates ?? company.candidates}
-                        now={outcome.requestedAt}
-                        sourceId={sourceId ?? ''}
-                      />
-                      <ExcludedCandidates candidates={company.excludedCandidates ?? []} now={outcome.requestedAt} />
-                    </>
                   ) : (
-                    <ul className="dg-candidates">
-                      {company.candidates.map((candidate) => (
-                        <li key={candidate.candidateId}>{candidate.sourceTitle}</li>
-                      ))}
-                    </ul>
+                    <p className="dg-note">
+                      Company-level source results are shown above. Each canonical source record is listed once below;
+                      imported-company relevance assessments are grouped by record.
+                    </p>
                   )}
                 </div>
               </details>
@@ -449,13 +546,98 @@ export default function DiscoveryResults({ outcome }: { outcome: DiscoveryRunOut
         })}
       </ul>
 
+      {actionableCandidates.length > 0 || excludedCandidates.length > 0 ? (
+        <>
+          <h3 id="discovered-source-records" className="dg-subtitle">
+            Discovered source records
+          </h3>
+          {isHistoricalSource ? (
+            <p className="dg-note" role="note">
+              Historical context — obligated federal award records, NOT open grant solicitations. This shows what has
+              already been awarded, not what is available to apply for.
+            </p>
+          ) : null}
+          {actionableCandidates.length > 0 ? (
+            <OpportunityCandidates
+              candidates={actionableCandidates}
+              now={outcome.requestedAt}
+              companyContexts={companyContexts}
+            />
+          ) : null}
+          <ExcludedCandidates
+            candidates={excludedCandidates}
+            now={outcome.requestedAt}
+            companyContexts={companyContexts}
+          />
+        </>
+      ) : null}
+
+      {targetRecommendations.length > 0 ? (
+        <>
+          <h3 className="dg-subtitle">Target company recommendations</h3>
+          <p className="dg-note" role="note">
+            Recommendations are generated from the imported target-company CSV and the discovered source records.
+            Relevance is not eligibility, approval, or application readiness.
+          </p>
+          <ul className="dg-results">
+            {recommendationGroups.map((companyResults) => {
+              const recommendation = companyResults[0]
+              if (recommendation === undefined) return null
+              return (
+                <li key={recommendation.opportunityId}>
+                  <details className="dg-result">
+                    <summary className="dg-result__summary">
+                      <span className="dg-result__name">{recommendation.opportunityTitle}</span>
+                      <span className="dg-result__counts">
+                        {companyResults.length} company assessment{companyResults.length === 1 ? '' : 's'}
+                      </span>
+                    </summary>
+                    <div className="dg-result__body">
+                      <ul className="dg-candidates">
+                        {companyResults.map((result) => (
+                          <li key={result.companyId} className="dg-candidate">
+                            <span className="dg-candidate__meta">
+                              <strong>{result.companyName}</strong> · {result.outcome} · deadline{' '}
+                              {result.deadline ?? '—'} · status {result.status ?? 'unknown'}
+                            </span>
+                            <span className="dg-candidate__meta">{result.reasons.join(' ')}</span>
+                            {result.matchedFields.length > 0 ? (
+                              <span className="dg-candidate__meta">Matched: {result.matchedFields.join(', ')}</span>
+                            ) : null}
+                            {result.missingFields.length > 0 ? (
+                              <span className="dg-candidate__meta">Missing: {result.missingFields.join(', ')}</span>
+                            ) : null}
+                            {result.uncertainty.length > 0 ? (
+                              <span className="dg-candidate__meta">Uncertainty: {result.uncertainty.join(' ')}</span>
+                            ) : null}
+                            {result.mismatchedFields.length > 0 ? (
+                              <span className="dg-candidate__meta">Mismatches: {result.mismatchedFields.join(', ')}</span>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                      <span className="dg-candidate__meta">
+                        {recommendation.opportunityId} · source record is linked in Discovered source records above
+                      </span>
+                    </div>
+                  </details>
+                </li>
+              )
+            })}
+          </ul>
+        </>
+      ) : null}
+
       <h3 className="dg-subtitle">Review handoff</h3>
       <div className="dg-handoff">
-        <Link to="/review" className="btn">
+        <Link to="/discovery?view=human-review" className="btn">
           View Review Queue
         </Link>
         {outcome.needsReview > 0 ? (
-          <Link to={`/review?run=${encodeURIComponent(outcome.runId)}`} className="btn">
+          <Link
+            to={`/discovery?view=human-review&run=${encodeURIComponent(outcome.runId)}`}
+            className="btn"
+          >
             Review {outcome.needsReview} {outcome.needsReview === 1 ? 'candidate' : 'candidates'}
           </Link>
         ) : null}

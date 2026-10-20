@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useReducer } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import SegmentedTabs from '../navigation/SegmentedTabs'
 import type { ProcurementMatchReviewItem, ProcurementMatchReviewStatus } from '../../automation/procurement-match-review'
@@ -15,6 +16,11 @@ import {
   RFP_LABEL,
   resolveProcurementReviewFilter,
 } from './labels'
+import { buildTargetCompanyProcurementMatchReviewItems } from '../../target-companies/procurement-match-bridge'
+import {
+  loadProcurementMatchReviewItems,
+  saveProcurementMatchReviewItems,
+} from '../../target-companies/procurement-match-review-store'
 
 /**
  * Procurement match review queue (Phase Q).
@@ -31,7 +37,21 @@ export default function ProcurementMatchReviewQueue() {
   const filter = resolveProcurementReviewFilter(params.get('status'))
   const source = resolveProcurementMatchSource(params.get(MATCH_REVIEW_DEMO_PARAM))
 
-  const items: readonly ProcurementMatchReviewItem[] = source.items
+  const [, forceRender] = useReducer((version: number) => version + 1, 0)
+  const generatedItems = useMemo(
+    () => (source.demo ? [] : buildTargetCompanyProcurementMatchReviewItems(new Date().toISOString())),
+    [source.demo],
+  )
+  useEffect(() => {
+    if (generatedItems.length > 0 && saveProcurementMatchReviewItems(generatedItems)) forceRender()
+  }, [generatedItems])
+  const persistedItems = source.demo ? [] : loadProcurementMatchReviewItems()
+  const items: readonly ProcurementMatchReviewItem[] = useMemo(() => {
+    if (source.demo) return source.items
+    const byProposalId = new Map(generatedItems.map((item) => [item.proposal.proposalId, item]))
+    for (const item of persistedItems) byProposalId.set(item.proposal.proposalId, item)
+    return [...byProposalId.values()]
+  }, [generatedItems, persistedItems, source.demo, source.items])
   const visible = filter === 'all' ? items : items.filter((entry) => entry.reviewStatus === filter)
 
   const counts = {} as Record<ProcurementMatchReviewStatus, number>
@@ -51,8 +71,9 @@ export default function ProcurementMatchReviewQueue() {
       <header className="page__header">
         <h1 className="page__title">Procurement match review</h1>
         <p className="page__description">
-          Human verdicts on deterministic RFP-to-company proposals. Approving a proposal only marks it
-          eligible for a future Procurement Match record — nothing is created or written here.
+          Review company fit for Human Review-approved, currently actionable procurement notices.
+          Each proposal keeps its own evidence and missing-information assessment; an approval is not
+          a decision to bid.
         </p>
       </header>
 
@@ -89,9 +110,9 @@ export default function ProcurementMatchReviewQueue() {
         <div className="empty" data-testid="procurement-match-review-empty">
           <p className="empty__headline">No real procurement match proposals yet</p>
           <p className="empty__body">
-            A real proposal needs a genuine company record and a genuine notice with available
-            provenance, plus matching evidence to evaluate. The imported snapshot holds no company
-            records, so no real proposals can be generated. Fixtures are never substituted here.
+            Proposals appear after a Human Review-approved notice passes the source-specific
+            open/deadline gate and imported target companies are available. Relevance is not proof
+            of eligibility, and missing information remains visible.
           </p>
         </div>
       ) : visible.length === 0 ? (

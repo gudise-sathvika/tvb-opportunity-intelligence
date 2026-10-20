@@ -4,6 +4,7 @@ const PAGE_SIZE = 5
 
 interface CompanySelectorProps {
   companies: readonly string[]
+  importedCompanies: boolean
   selected: ReadonlySet<string>
   demo: boolean
   onToggle(companyName: string): void
@@ -14,12 +15,12 @@ interface CompanySelectorProps {
 /**
  * Company selection for a discovery run (Phase G brief §3).
  *
- * The selector lists names from the source directory. They are selection keys,
- * not Company records or generated Company IDs. The live count ("N companies
- * selected") is spoken by a status region so screen readers hear selection changes.
+ * Imported company records take precedence over name-only directory search
+ * keys. The live selection count is announced to screen readers.
  */
 export default function CompanySelector({
   companies,
+  importedCompanies,
   selected,
   demo,
   onToggle,
@@ -47,7 +48,9 @@ export default function CompanySelector({
 
   return (
     <section className="card dg-panel" aria-label="Company selection">
-      <h2 className="dg-panel__title">{demo ? 'Demo companies' : 'Company directory'}</h2>
+      <h2 className="dg-panel__title">
+        {demo ? 'Demo companies' : importedCompanies ? 'Imported companies for discovery' : 'Company directory'}
+      </h2>
 
       <label className="dg-company-search">
         <span className="visually-hidden">Search companies</span>
@@ -62,10 +65,15 @@ export default function CompanySelector({
           }}
         />
       </label>
-      {!demo ? (
+      {!demo && !importedCompanies ? (
         <p className="dg-instruction" role="note">
-          Verified company profiles have not yet been added. The names below are a directory used as search
-          keys, not verified company records.
+          The names below are search keys from the company directory, not verified company records.
+        </p>
+      ) : null}
+      {importedCompanies ? (
+        <p className="dg-instruction" role="note">
+          These imported company records are used as supplied for discovery, review context, and relevance
+          assessment. Missing information remains unknown; GLEIF verification is not required.
         </p>
       ) : null}
 
@@ -86,7 +94,7 @@ export default function CompanySelector({
         <p className="dg-empty">
           {demo
             ? 'No company records are available to run discovery for.'
-            : 'No company records are available to run discovery for. (Verified company profiles have not yet been added.)'}
+            : 'No company records are available to run discovery for.'}
         </p>
       ) : (
         <>

@@ -1,11 +1,16 @@
 import { useState } from 'react'
-import { procurementMatchReviewFixtureStore } from '../../automation/procurement-match-fixture'
-import type { ProcurementMatchReviewItem } from '../../automation/procurement-match-review'
-import { proposeBidDecision } from '../../automation/bid-proposal-fixture'
+import {
+  applyProcurementMatchReviewDecision,
+  type ProcurementMatchReviewItem,
+} from '../../automation/procurement-match-review'
+import { proposeBidFromApprovedMatch } from '../../automation/bid-proposal'
 import type { BidProposalResult } from '../../automation/bid-proposal'
 import { MatchReviewStatusBadge } from '../match-review/MatchReviewStatusBadge'
 import { PMATCH_PROPOSAL_STATUS_LABEL, PMATCH_SIGNAL_LABEL, RFP_LABEL } from './labels'
 import BoundaryNote from '../ui/BoundaryNote'
+import { saveTargetApplicationSelection } from '../../target-companies/application-selection'
+import { companyForBid, listBids, noticeForBid } from '../../data/selectors'
+import { proposeBidDecision } from '../../automation/bid-proposal-fixture'
 
 /**
  * Procurement match proposal detail (Phase Q), extended with the Phase R Bid
@@ -15,16 +20,18 @@ import BoundaryNote from '../ui/BoundaryNote'
  * proposal, matched evidence, missing evidence, rule version, decision
  * history, decision controls — with Approve/Reject for pending reviews and a
  * history-only terminal state. A ninth "Bid decision" section appears ONLY on
- * APPROVED items: "Decide to Bid" / "Do Not Bid" produce a deterministic
- * dry-run Bid proposal (Phase R) and never create a Bid or Contract. The
- * business rule is stated on the page: approval means relevance, not intent to
- * bid. No scores, no confidence, no generated text.
+ * APPROVED items: "Decide to Bid" / "Do Not Bid" produce a browser-persisted
+ * pursuit and deterministic dry-run Bid proposal (Phase R), never a Vault Bid
+ * or Contract. The business rule is stated on the page: approval means
+ * relevance, not intent to bid. No scores, no confidence, no generated text.
  */
 export default function ProcurementMatchReviewDetail({
   item,
+  demo = false,
   onDecided,
 }: {
   item: ProcurementMatchReviewItem
+  demo?: boolean
   onDecided: (updated: ProcurementMatchReviewItem) => void
 }) {
   const [reviewerId, setReviewerId] = useState('')
@@ -41,7 +48,7 @@ export default function ProcurementMatchReviewDetail({
       return
     }
     try {
-      const updated = procurementMatchReviewFixtureStore.apply({
+      const updated = applyProcurementMatchReviewDecision(item, {
         proposalId: item.proposal.proposalId,
         decision,
         reviewerId: reviewer,
@@ -62,14 +69,44 @@ export default function ProcurementMatchReviewDetail({
       return
     }
     try {
-      setBidResult(
-        proposeBidDecision({
-          proposalId: item.proposal.proposalId,
-          decision,
-          deciderId: decider,
-          decidedAt: new Date().toISOString(),
-        }),
-      )
+      const decidedAt = new Date().toISOString()
+      const bids = listBids()
+      const result = demo
+        ? proposeBidDecision({
+            proposalId: item.proposal.proposalId,
+            decision,
+            deciderId: decider,
+            decidedAt,
+          })
+        : proposeBidFromApprovedMatch({
+            item,
+            decision,
+            deciderId: decider,
+            decidedAt,
+            existingBidIds: bids.map((bid) => bid.id),
+            existingBidPairs: bids.flatMap((bid) => {
+              const notice = noticeForBid(bid.id)
+              const company = companyForBid(bid.id)
+              return notice && company ? [`${notice.id}|${company.id}`] : []
+            }),
+          })
+      if (result.outcome === 'proposed') {
+        const saved = saveTargetApplicationSelection({
+          companyId: item.proposal.companyId,
+          companyName: item.companyName ?? item.proposal.companyId,
+          opportunityId: item.proposal.noticeId,
+          opportunityTitle: item.noticeName ?? item.proposal.noticeId,
+          sourceUrl: item.noticeSourceUrl ?? '',
+          opportunityType: 'procurement',
+          status: 'planned',
+          createdAt: decidedAt,
+        })
+        if (!saved) {
+          setBidError('This company and notice already have a tracked bid, or browser storage is unavailable.')
+          return
+        }
+      }
+      setBidResult(result)
       setBidError(null)
     } catch (cause) {
       setBidError(cause instanceof Error ? cause.message : 'The bid decision could not be recorded.')
@@ -95,6 +132,14 @@ export default function ProcurementMatchReviewDetail({
             <dd className="fields__value">
               {item.noticeName ?? item.proposal.noticeId} <code className="idbadge">{item.proposal.noticeId}</code>{' '}
               <span className="mr-kind">{RFP_LABEL}</span>
+              {item.noticeSourceUrl ? (
+                <>
+                  {' '}
+                  <a href={item.noticeSourceUrl} target="_blank" rel="noreferrer">
+                    Official notice
+                  </a>
+                </>
+              ) : null}
             </dd>
           </div>
         </dl>
@@ -249,8 +294,8 @@ export default function ProcurementMatchReviewDetail({
           <h2 className="card__title">9. Bid decision</h2>
           <p className="card__note">
             Approval means this RFP is relevant to the company. A separate decision is required
-            before creating a Bid. Choosing “Decide to Bid” prepares a dry-run Bid proposal —
-            no Bid record and no Contract are created by this decision.
+            before pursuing it. Choosing “Decide to Bid” starts browser-persisted bid tracking and
+            prepares a dry-run proposal; it does not create a Vault Bid or Contract record.
           </p>
           {bidError ? (
             <p className="rv-message rv-message--error" role="alert">
@@ -261,7 +306,7 @@ export default function ProcurementMatchReviewDetail({
             <div role="status">
               <p className="rv-message rv-message--saved">
                 Bid proposal <code className="idbadge">{bidResult.bidId}</code> prepared — no Bid
-                record was created.
+                record was created in the Vault; the pursuit is tracked in this browser.
               </p>
               <dl className="fields">
                 <div className="fields__row">

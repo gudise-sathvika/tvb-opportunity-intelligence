@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useReducer, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import SegmentedTabs from '../navigation/SegmentedTabs'
 import type { MatchReviewItem, MatchReviewStatus } from '../../automation/match-review'
@@ -8,7 +9,12 @@ import {
   resolveMatchReviewSource,
 } from '../../automation/match-review-source'
 import { MatchReviewStatusBadge } from './MatchReviewStatusBadge'
-import LiveMatchCheck from './LiveMatchCheck'
+import { saveTargetApplicationSelection } from '../../target-companies/application-selection'
+import { buildTargetCompanyMatchReviewItems } from '../../target-companies/match-review-bridge'
+import {
+  saveMatchReviewItems,
+  loadMatchReviewItems,
+} from '../../target-companies/match-review-store'
 import {
   MATCH_REVIEW_FILTERS,
   MATCH_SIGNAL_LABEL,
@@ -31,7 +37,21 @@ export default function MatchReviewQueue() {
   const filter = resolveMatchReviewFilter(params.get('status'))
   const source = resolveMatchReviewSource(params.get(MATCH_REVIEW_DEMO_PARAM))
 
-  const items: readonly MatchReviewItem[] = source.items
+  const [, forceRender] = useReducer((version: number) => version + 1, 0)
+  const bridgeItems = useMemo(
+    () => (source.demo ? [] : buildTargetCompanyMatchReviewItems(new Date().toISOString())),
+    [source.demo],
+  )
+  useEffect(() => {
+    if (bridgeItems.length > 0 && saveMatchReviewItems(bridgeItems)) forceRender()
+  }, [bridgeItems])
+  const storedItems = source.demo ? [] : loadMatchReviewItems()
+  const items: readonly MatchReviewItem[] = useMemo(() => {
+    if (source.demo) return source.items
+    const byProposalId = new Map(bridgeItems.map((item) => [item.proposal.proposalId, item]))
+    for (const item of storedItems) byProposalId.set(item.proposal.proposalId, item)
+    return [...byProposalId.values()]
+  }, [bridgeItems, source.demo, source.items, storedItems])
   const visible = filter === 'all' ? items : items.filter((entry) => entry.reviewStatus === filter)
 
   const counts = {} as Record<MatchReviewStatus, number>
@@ -51,8 +71,8 @@ export default function MatchReviewQueue() {
       <header className="page__header">
         <h1 className="page__title">Match review</h1>
         <p className="page__description">
-          Human verdicts on deterministic match proposals. Approving a proposal only marks it
-          eligible for a future Match record — nothing is created or written here.
+          Review company fit for Human Review-approved, currently actionable funding opportunities.
+          Evidence and missing information are shown for each company–opportunity proposal.
         </p>
       </header>
 
@@ -63,14 +83,6 @@ export default function MatchReviewQueue() {
           demo mode.
         </div>
       ) : null}
-
-      {!source.demo ? <LiveMatchCheck /> : null}
-
-      <h2 className="dg-subtitle">Persisted proposal review</h2>
-      <p className="dg-note" role="note">
-        The saved proposal queue below is derived from the application&apos;s persisted data
-        source — live check results above never enter it automatically.
-      </p>
 
       <div className="statgrid review-stats" role="group" aria-label="Match review summary">
         {MATCH_REVIEW_FILTERS.filter((f) => f.status !== null).map((f) => (
@@ -97,14 +109,10 @@ export default function MatchReviewQueue() {
         <div className="empty" data-testid="match-review-empty">
           <p className="empty__headline">No persisted match proposals are awaiting review</p>
           <p className="empty__body">
-            This saved queue is empty: its data source currently holds no proposals to
-            review. A persisted proposal would require a verified company profile
-            (directory names alone are never sufficient — verification today means an
-            active GLEIF LEI record) and a genuine opportunity record with available
-            provenance. Temporary live evaluations from the check above never enter this
-            queue automatically, so their presence above never contradicts this empty
-            state. Country compatibility or keyword overlap alone never establishes
-            eligibility, and fixtures are never substituted here.
+            Funding proposals appear after a Human Review-approved opportunity passes the
+            source-specific open/deadline gate and imported target companies are available. Missing
+            company or opportunity information remains explicit; a relevance proposal is not proof
+            of eligibility.
           </p>
         </div>
       ) : visible.length === 0 ? (
@@ -142,6 +150,7 @@ export default function MatchReviewQueue() {
 }
 
 function MatchReviewRow({ entry, demo }: { entry: MatchReviewItem; demo: boolean }) {
+  const [actionFeedback, setActionFeedback] = useState<{ kind: 'error' | 'success'; message: string } | null>(null)
   const matched = entry.proposal.matchedSignals.map((signal) => MATCH_SIGNAL_LABEL[signal])
   const missing = entry.proposal.missingSignals.map((signal) => MATCH_SIGNAL_LABEL[signal])
   const detailPath = `/match-review/${encodeURIComponent(entry.proposal.proposalId)}${
@@ -169,6 +178,42 @@ function MatchReviewRow({ entry, demo }: { entry: MatchReviewItem; demo: boolean
       </td>
       <td data-label="Status">
         <MatchReviewStatusBadge status={entry.reviewStatus} />
+        {entry.reviewStatus === 'APPROVED' ? (
+          <button
+            type="button"
+            className="btn"
+            onClick={() => {
+              const saved = saveTargetApplicationSelection({
+                companyId: entry.proposal.companyId,
+                companyName: entry.companyName ?? entry.proposal.companyId,
+                opportunityId: entry.proposal.sourceRecordId,
+                opportunityTitle: entry.sourceName ?? entry.proposal.sourceRecordId,
+                sourceUrl: '',
+                opportunityType: 'funding',
+                status: 'planned',
+                createdAt: new Date().toISOString(),
+              })
+              if (!saved) {
+                setActionFeedback({
+                  kind: 'error',
+                  message: 'An application is already tracked for this company and opportunity, or browser storage is unavailable.',
+                })
+                return
+              }
+              setActionFeedback({
+                kind: 'success',
+                message: 'Application tracking started. No Vault Application record was created.',
+              })
+            }}
+          >
+            Start Application
+          </button>
+        ) : null}
+        {actionFeedback ? (
+          <p className={`rv-message rv-message--${actionFeedback.kind === 'success' ? 'saved' : 'error'}`} role={actionFeedback.kind === 'error' ? 'alert' : 'status'}>
+            {actionFeedback.message}
+          </p>
+        ) : null}
       </td>
     </tr>
   )

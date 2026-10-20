@@ -20,8 +20,8 @@
  *    database is unjustified for this deployment).
  *
  * Wiring: `installReviewPersistence()` subscribes a saver to the store and
- * restores once; call it from the Human Review view. Everything here is
- * injected/testable and side-effect free until installed.
+ * restores once before routed views mount. Everything here is injected/testable
+ * and side-effect free until installed.
  */
 
 import { REVIEW_STATUSES } from '../automation/review-queue'

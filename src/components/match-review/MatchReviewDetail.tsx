@@ -1,6 +1,5 @@
 import { useState } from 'react'
-import { matchReviewFixtureStore } from '../../automation/match-review-fixture'
-import type { MatchReviewItem } from '../../automation/match-review'
+import { applyMatchReviewDecision, type MatchReviewItem } from '../../automation/match-review'
 import { MatchReviewStatusBadge } from './MatchReviewStatusBadge'
 import { MATCH_SIGNAL_LABEL, PROPOSAL_STATUS_LABEL, sourceKindLabel } from './labels'
 import BoundaryNote from '../ui/BoundaryNote'
@@ -31,7 +30,7 @@ export default function MatchReviewDetail({
       return
     }
     try {
-      const updated = matchReviewFixtureStore.apply({
+      const updated = applyMatchReviewDecision(item, {
         proposalId: item.proposal.proposalId,
         decision,
         reviewerId: reviewer,
@@ -64,6 +63,14 @@ export default function MatchReviewDetail({
             <dd className="fields__value">
               {item.sourceName ?? item.proposal.sourceRecordId}{' '}
               <code className="idbadge">{item.proposal.sourceRecordId}</code>
+              {item.sourceUrl ? (
+                <>
+                  {' '}
+                  <a href={item.sourceUrl} target="_blank" rel="noreferrer">
+                    Official source
+                  </a>
+                </>
+              ) : null}
             </dd>
           </div>
           <div className="fields__row">

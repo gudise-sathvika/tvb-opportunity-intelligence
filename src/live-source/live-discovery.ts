@@ -105,40 +105,47 @@ export function defaultTedBridgeClient(): TedBridgeClient {
 }
 
 /**
- * Phase 04 shared-pool handoff rule. Candidates from the broad, non-keyworded
- * FTS feed are byte-identical for every company in the run (same notice,
- * same candidateId `DC:{sourceId}:{recordId}`), so without this step the same
- * notice would enter the review queue once per company
- * (`RI:…:NORMALIZED`, `…#1`, `…#2`, …). The first occurrence is canonical;
- * later ones are the same notice, not new evidence, and are withheld from the
- * handoff. The canonical item is attributed to the shared pool — a broad
- * notice is unassigned, never company-matched. Company-directed (TED)
- * candidates pass through untouched, as do the per-company display lists.
- * Exported for tests.
+ * Canonical review handoff: one source notice becomes one Human Review item,
+ * even when it was discovered by searches for several companies. Repeated
+ * notices from shared feeds are assigned to their unassigned pool; a
+ * company-directed notice is assigned to that pool only when another company
+ * also found the same source identity. Per-company discovery display lists
+ * remain unchanged. Exported for tests.
  */
 export function dedupeHandoffCandidates(
   candidates: readonly DiscoveryCandidate[],
   poolSourceIds: readonly string[] = [FTS_SOURCE_ID],
   poolCompanyId: string = FTS_LIVE_POOL_COMPANY_ID,
 ): DiscoveryCandidate[] {
-  const seen = new Set<string>()
+  const positions = new Map<string, number>()
   const handoff: DiscoveryCandidate[] = []
   for (const candidate of candidates) {
-    if (!poolSourceIds.includes(candidate.sourceId)) {
-      handoff.push(candidate)
+    const recordId = candidate.sourceRecordId?.trim()
+    const stableSourceKey =
+      recordId || candidate.normalization?.canonicalUrl?.trim() || candidate.sourceUrl.trim() || candidate.candidateId
+    const identity = `${candidate.sourceId}:${stableSourceKey}`
+    const existingIndex = positions.get(identity)
+    if (existingIndex !== undefined) {
+      const existing = handoff[existingIndex]
+      if (existing && (poolSourceIds.includes(candidate.sourceId) || existing.companyId !== candidate.companyId)) {
+        handoff[existingIndex] = unassignCandidate(existing, poolCompanyId)
+      }
       continue
     }
-    if (seen.has(candidate.candidateId)) continue
-    seen.add(candidate.candidateId)
+    positions.set(identity, handoff.length)
     handoff.push(
-      deepFreeze({
-        ...candidate,
-        companyId: poolCompanyId,
-        provenance: { ...candidate.provenance, companyId: poolCompanyId },
-      }),
+      poolSourceIds.includes(candidate.sourceId) ? unassignCandidate(candidate, poolCompanyId) : candidate,
     )
   }
   return handoff
+}
+
+function unassignCandidate(candidate: DiscoveryCandidate, poolCompanyId: string): DiscoveryCandidate {
+  return deepFreeze({
+    ...candidate,
+    companyId: poolCompanyId,
+    provenance: { ...candidate.provenance, companyId: poolCompanyId },
+  })
 }
 
 /** Async same-origin FTS bridge client; injectable for tests. */

@@ -35,6 +35,7 @@ import { reviewFixtureStore } from '../automation/review-fixture'
 import { createReviewQueue, reviewStatusForCandidate } from '../automation/review-queue'
 import { createUsaSpendingAdapter } from '../automation/usaspending-adapter'
 import type { UsaSpendingTransport } from '../automation/usaspending-adapter'
+import { dedupeHandoffCandidates } from './live-discovery'
 import { USA_BRIDGE_SEARCH_PATH } from './usaspending-bridge/contract'
 import type { UsaSpendingBridgeSearchRequest, UsaSpendingBridgeSearchResponse } from './usaspending-bridge/contract'
 
@@ -308,7 +309,10 @@ export function createLiveUsaSpendingDiscovery(options: {
         allCandidates.push(...company.candidates)
       }
 
-      const reviewQueue = createReviewQueue(allCandidates, { createdAt: context.requestedAt })
+      const reviewQueue = createReviewQueue(
+        dedupeHandoffCandidates(allCandidates, [], 'RUN'),
+        { createdAt: context.requestedAt },
+      )
       reviewFixtureStore.addReviewItems(reviewQueue)
       const outcome: DiscoveryRunOutcome = deepFreeze({
         runId: context.runId,

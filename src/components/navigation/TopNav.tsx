@@ -8,14 +8,8 @@
 
 import { useEffect, useState } from 'react'
 import { NavLink, Link, useLocation } from 'react-router-dom'
-import { primaryLink, supportingLinks, utilityDropdowns, workspaceDropdowns } from '../../app/nav'
-import DropdownNav from './DropdownNav'
+import { primaryLink, supportingLinks } from '../../app/nav'
 import ThemeToggle from '../ui/ThemeToggle'
-
-function owns(pathname: string, path: string): boolean {
-  const base = path.split('?')[0]
-  return pathname === base || pathname.startsWith(`${base}/`)
-}
 
 export default function TopNav() {
   const location = useLocation()
@@ -58,16 +52,6 @@ export default function TopNav() {
             {primaryLink.label}
           </NavLink>
 
-          {workspaceDropdowns.map((group) => (
-            <div
-              key={group.id}
-              className="topnav__group"
-              data-active={group.match.some((m) => owns(location.pathname, m)) ? 'true' : undefined}
-            >
-              <DropdownNav group={group} />
-            </div>
-          ))}
-
           {supportingLinks.map((link) => (
             <NavLink
               key={link.to}
@@ -76,16 +60,6 @@ export default function TopNav() {
             >
               {link.label}
             </NavLink>
-          ))}
-
-          {utilityDropdowns.map((group) => (
-            <div
-              key={group.id}
-              className="topnav__group"
-              data-active={group.match.some((m) => owns(location.pathname, m)) ? 'true' : undefined}
-            >
-              <DropdownNav group={group} />
-            </div>
           ))}
 
           <div className="topnav__actions">

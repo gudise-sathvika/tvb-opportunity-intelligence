@@ -12,7 +12,7 @@ import assert from 'node:assert/strict'
 
 import { FTS_SOURCE_ID, TED_SOURCE_ID } from '../automation/registry'
 import { TED_SEARCH_RESPONSE_RECORDING } from '../automation/ted-fixture'
-import { FTS_LIVE_POOL_COMPANY_ID, createLiveTedDiscovery } from './live-discovery'
+import { FTS_LIVE_POOL_COMPANY_ID, createLiveTedDiscovery, dedupeHandoffCandidates } from './live-discovery'
 import type { TedBridgeSearchRequest, TedBridgeSearchResponse } from './ted-bridge/contract'
 import type { FtsBridgeSearchRequest, FtsBridgeSearchResponse } from './fts-bridge/contract'
 
@@ -109,7 +109,7 @@ test('a live run with a recorded TED response goes through the real adapter and 
   assert.equal(requests[0].limit, 10)
 })
 
-test('finishRun hands every live candidate into the real review queue', async () => {
+test('finishRun hands each unique live notice into the real review queue', async () => {
   const store = createLiveTedDiscovery({ bridge: capturingBridge(), requestedAt: REQUESTED_AT })
   const context = store.beginRun({ keyword: 'solar energy' })
 
@@ -123,19 +123,17 @@ test('finishRun hands every live candidate into the real review queue', async ()
   assert.equal(outcome.counts.candidatesReceived, 6)
   assert.equal(outcome.counts.candidatesCreated, 6)
   assert.equal(outcome.counts.duplicates, 0)
-  assert.equal(outcome.needsReview, 6)
+  assert.equal(outcome.needsReview, 3)
   assert.equal(outcome.outcome, 'SUCCESS')
-  assert.equal(outcome.reviewQueue.length, 6)
+  assert.equal(outcome.reviewQueue.length, 3)
   assert.equal(outcome.companyIds.length, 2)
   assert.equal(outcome.keyword, 'solar energy')
+  assert.ok(outcome.reviewQueue.every((item) => item.companyId === FTS_LIVE_POOL_COMPANY_ID))
 
   const history = store.history()
   assert.equal(history.length, 1)
   assert.equal(history[0].runId, 'RUN-T-0001')
   assert.deepEqual(history[0].reviewQueue.map((item) => item.sourceRecordId), [
-    '534463-2026',
-    '535503-2026',
-    '536878-2026',
     '534463-2026',
     '535503-2026',
     '536878-2026',
@@ -454,6 +452,37 @@ test('canonical FTS review ids are stable across runs with different company set
     'RI:DC:SU-FTS-001:ocds-h6vhtk-TEST01:NORMALIZED',
     'RI:DC:SU-FTS-001:ocds-h6vhtk-TEST02:NORMALIZED',
   ])
+})
+
+test('canonical handoff falls back to source URL when a source record ID is blank', async () => {
+  const store = createLiveTedDiscovery({
+    bridge: capturingBridge(),
+    ftsBridge: async (): Promise<FtsBridgeSearchResponse> => FTS_LIVE_RECORDING,
+    requestedAt: REQUESTED_AT,
+  })
+  const context = store.beginRun({})
+  const company = await store.runCompany(context, 'Aavo')
+  const candidate = company.candidates.find((entry) => entry.sourceId === FTS_SOURCE_ID)
+  assert.ok(candidate)
+  const withoutRecordId = (suffix: string, sourceUrl: string) => ({
+    ...candidate,
+    candidateId: `${candidate.candidateId}-${suffix}`,
+    sourceRecordId: '',
+    sourceUrl,
+    normalization:
+      candidate.normalization === null
+        ? null
+        : { ...candidate.normalization, canonicalUrl: sourceUrl },
+  })
+  const handoff = dedupeHandoffCandidates(
+    [
+      withoutRecordId('first', 'https://records.example/shared-notice'),
+      withoutRecordId('duplicate', 'https://records.example/shared-notice'),
+      withoutRecordId('other', 'https://records.example/other-notice'),
+    ],
+    [FTS_SOURCE_ID],
+  )
+  assert.equal(handoff.length, 2)
 })
 
 test('re-adding an identical handoff creates no new items and preserves human decisions', async () => {

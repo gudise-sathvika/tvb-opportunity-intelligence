@@ -1,6 +1,5 @@
 import { Fragment, useEffect, useMemo, useReducer, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { installReviewPersistence } from '../../live-source/review-persistence'
 import { COMPANY_DIRECTORY_NAMES } from '../../data/company-directory-names'
 import { associationsForCompany } from '../../live-source/company-associations'
 import { reviewFixtureStore } from '../../automation/review-fixture'
@@ -68,9 +67,9 @@ function CompanyApprovals({ name }: { name: string }) {
                 <a className="dg-candidate__link" href={item.sourceUrl} target="_blank" rel="noreferrer">
                   Official source record
                 </a>{' '}
-                <Link to={`/review/${encodeURIComponent(item.reviewId)}`}>Open review item</Link>{' '}
-                <Link to={`/prepare/${encodeURIComponent(item.reviewId)}`}>Prepare application</Link>
-                <span className="dg-candidate__meta">TVB does not submit applications automatically.</span>
+                <Link to={`/discovery/review/${encodeURIComponent(item.reviewId)}?view=approved`}>
+                  Open approved review
+                </Link>
               </li>
             )
           })}
@@ -91,16 +90,13 @@ export default function CompaniesTable({ headingAs = 'h1' }: { headingAs?: 'h1' 
   const [sort, setSort] = useState<'asc' | 'desc'>('asc')
   const [page, setPage] = useState(0)
   const [expanded, setExpanded] = useState<string | null>(null)
-  // Phase 33: restore persisted review items/decisions so approved lists survive reloads.
   const [, forceRender] = useReducer((version: number) => version + 1, 0)
   useEffect(() => {
-    const uninstallPersistence = installReviewPersistence()
     const unsubscribeTick = reviewFixtureStore.subscribe(() => {
       forceRender()
     })
     forceRender()
     return () => {
-      uninstallPersistence()
       unsubscribeTick()
     }
   }, [])

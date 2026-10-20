@@ -6,16 +6,24 @@
  * to the page heading through one shared hook.
  */
 
-import { useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import TopNav from '../components/navigation/TopNav'
 import WorkspaceBar from '../components/navigation/WorkspaceBar'
 import { useRouteFocus } from '../hooks/useRouteFocus'
+import { installReviewPersistence } from '../live-source/review-persistence'
 
 export default function AppShell() {
   const mainRef = useRef<HTMLElement>(null)
   const location = useLocation()
+  const [reviewPersistenceReady, setReviewPersistenceReady] = useState(false)
   useRouteFocus(mainRef)
+
+  useEffect(() => {
+    const uninstallPersistence = installReviewPersistence()
+    setReviewPersistenceReady(true)
+    return uninstallPersistence
+  }, [])
 
   return (
     <div className="shell">
@@ -31,7 +39,7 @@ export default function AppShell() {
         key={location.pathname}
         ref={mainRef}
       >
-        <Outlet />
+        {reviewPersistenceReady ? <Outlet /> : null}
       </main>
     </div>
   )

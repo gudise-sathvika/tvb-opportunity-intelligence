@@ -110,22 +110,20 @@ test('run-level counts reconcile: company sums vs unique review handoff', async 
   const companyCandidateSum = companies.reduce((sum, company) => sum + company.candidates.length, 0)
   assert.equal(outcome.counts.candidatesCreated, companyCandidateSum)
   assert.ok(companyCandidateSum > outcome.reviewQueue.length)
-  // The handoff carries unique stable identities for the shared pool only:
-  // one canonical unassigned item per FTS notice, however many companies ran.
+  // The handoff carries one item per source notice, independent of how many
+  // company searches surfaced it.
   const ftsHandoff = outcome.reviewQueue.filter((item) => item.sourceId === FTS_SOURCE_ID)
   assert.equal(ftsHandoff.length, 2)
   assert.equal(new Set(ftsHandoff.map((item) => item.candidateId)).size, 2)
   assert.ok(ftsHandoff.every((item) => item.companyId === FTS_LIVE_POOL_COMPANY_ID))
-  // TED items are separate per-company discovery events (one live fetch per
-  // company), so identical notices found for two companies yield one item per
-  // searching company, each attributed to its own search — never pooled.
+  // TED searches are company-directed, but a repeated notice is one source
+  // record in Human Review and is unassigned rather than attributed to the
+  // first company that found it.
   const tedItems = outcome.reviewQueue.filter((item) => item.sourceId === TED_SOURCE_ID)
-  assert.equal(tedItems.length, 6)
-  assert.ok(tedItems.every((item) => item.companyId !== FTS_LIVE_POOL_COMPANY_ID))
-  assert.deepEqual(
-    tedItems.filter((item) => item.companyId === 'Aavo').map((item) => item.candidateId).sort(),
-    tedItems.filter((item) => item.companyId === 'Arka VC').map((item) => item.candidateId).sort(),
-  )
+  assert.equal(tedItems.length, 3)
+  assert.equal(new Set(tedItems.map((item) => item.sourceRecordId)).size, 3)
+  assert.ok(tedItems.every((item) => item.companyId === FTS_LIVE_POOL_COMPANY_ID))
+  assert.ok(tedItems.every((item) => item.provenance.companyId === FTS_LIVE_POOL_COMPANY_ID))
   // needsReview counts the deduped queue, matching what review will show.
   assert.equal(outcome.needsReview, outcome.reviewQueue.filter((item) => item.reviewStatus === 'NEEDS_REVIEW').length)
 })
@@ -146,7 +144,7 @@ test('canonical shared items stay reachable under the run-scoped review link', a
   }
 })
 
-test('repeated handoff processing never duplicates shared-pool ids; company searches pass through', async () => {
+test('repeated handoff processing never duplicates notices, including company-directed searches', async () => {
   const live = store([], [])
   const context = live.beginRun({ keyword: 'solar energy' })
   const companies = [await live.runCompany(context, 'Aavo'), await live.runCompany(context, 'Arka VC')]
@@ -158,13 +156,10 @@ test('repeated handoff processing never duplicates shared-pool ids; company sear
   // Shared-pool identities are stable no matter how often the handoff repeats.
   assert.deepEqual(ftsIds(twice), ftsIds(once))
   assert.equal(new Set(ftsIds(once)).size, ftsIds(once).length)
-  // Company-directed TED searches are separate discovery events each with
-  // their own fetch, so their items pass through untouched — only the single
-  // shared fetch is deduped, never distinct searches.
-  assert.equal(
-    twice.filter((candidate) => candidate.candidateId.startsWith('DC:SU-TED-001:')).length,
-    2 * once.filter((candidate) => candidate.candidateId.startsWith('DC:SU-TED-001:')).length,
-  )
+  const tedIds = (list: readonly { candidateId: string }[]): string[] =>
+    list.filter((candidate) => candidate.candidateId.startsWith('DC:SU-TED-001:')).map((candidate) => candidate.candidateId)
+  assert.equal(tedIds(twice).length, tedIds(once).length)
+  assert.equal(new Set(tedIds(once)).size, tedIds(once).length)
 })
 
 test('a successful empty source stays distinct from failure in the same run', async () => {
