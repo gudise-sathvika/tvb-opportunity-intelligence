@@ -6,7 +6,7 @@
  */
 
 export const TARGET_COMPANY_ROW_MIN = 5
-export const TARGET_COMPANY_ROW_MAX = 10
+export const TARGET_COMPANY_ROW_MAX = 50
 
 export interface CsvPreview {
   /** Detected header row (may be empty when the file could not be parsed). */

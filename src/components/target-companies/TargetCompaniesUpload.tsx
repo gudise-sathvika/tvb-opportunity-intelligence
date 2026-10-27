@@ -81,8 +81,10 @@ export default function TargetCompaniesUpload({
   const maxColumns = preview ? Math.max(preview.headers.length, ...preview.rows.map((row) => row.length), 0) : 0
   const extraColumnCount = preview ? Math.max(0, maxColumns - preview.headers.length) : 0
 
+  const [isDragging, setIsDragging] = useState(false)
+
   return (
-    <section className="page" aria-labelledby="target-companies-heading">
+    <section className="page sn-upload-container" aria-labelledby="target-companies-heading">
       <header className="page__header">
         <h2 className="page__title page__title--sub" id="target-companies-heading">
           {heading}
@@ -93,87 +95,154 @@ export default function TargetCompaniesUpload({
         </p>
       </header>
 
-      <div className="target-companies__toolbar">
-        <label className="btn" htmlFor="target-companies-csv">
-          {importLabel}
-          <input
-            ref={inputRef}
-            id="target-companies-csv"
-            type="file"
-            accept=".csv,text/csv"
-            className="visually-hidden"
-            onChange={(event) => {
-              void handleFile(event.target.files?.[0] ?? null)
+      {/* Modern Rectangular Upload Dropzone Box */}
+      <div
+        className={`sn-upload-dropzone ${isDragging ? 'sn-upload-dropzone--dragover' : ''} ${imported ? 'sn-upload-dropzone--has-data' : ''}`}
+        onDragOver={(e) => {
+          e.preventDefault()
+          setIsDragging(true)
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault()
+          setIsDragging(false)
+        }}
+        onDrop={(e) => {
+          e.preventDefault()
+          setIsDragging(false)
+          void handleFile(e.dataTransfer.files?.[0] ?? null)
+        }}
+      >
+        <div className="sn-upload-dropzone__icon-circle" aria-hidden="true">
+          {fileName ? '📄' : imported ? '🏢' : '＋'}
+        </div>
+
+        <div className="sn-upload-dropzone__title">
+          {fileName
+            ? `File Selected: ${fileName}`
+            : imported
+              ? `${imported.rowCount} Target Companies Active`
+              : 'Upload Target Companies CSV'}
+        </div>
+
+        <div className="sn-upload-dropzone__subtitle">
+          {fileName
+            ? 'Review the table preview below and click Confirm import to activate these profiles.'
+            : imported
+              ? 'These companies are actively matched against live grants and procurement tenders. You can drop a new CSV below to replace them.'
+              : `Drag and drop your company list CSV here, or click Browse to choose a file (${TARGET_COMPANY_ROW_MIN}–${TARGET_COMPANY_ROW_MAX} companies).`}
+        </div>
+
+        <div className="sn-upload-dropzone__actions target-companies__toolbar">
+          <label className="btn btn--primary" htmlFor="target-companies-csv">
+            <span style={{ marginRight: '6px' }}>📂</span>
+            {importLabel}
+            <input
+              ref={inputRef}
+              id="target-companies-csv"
+              type="file"
+              accept=".csv,text/csv"
+              className="visually-hidden"
+              onChange={(event) => {
+                void handleFile(event.target.files?.[0] ?? null)
+              }}
+            />
+          </label>
+
+          <button
+            type="button"
+            className="btn btn--accent"
+            onClick={() => {
+              if (preview && preview.errors.length === 0 && !importing) {
+                const text = fileTextRef.current ?? ''
+                const signature = `${fileName ?? ''}:${text.length}:${simpleHash(text)}`
+                if (signature !== '' && signature === lastImportedSignature) {
+                  return
+                }
+                setImporting(true)
+                setImportError(null)
+                const saved = saveImportedTargetCompanies(preview)
+                if (saved) {
+                  setImported(loadImportedTargetCompanies())
+                  setLastImportedSignature(signature)
+                } else {
+                  setImportError('The CSV could not be saved in this browser. Your existing imported companies were not changed.')
+                }
+                setImporting(false)
+              }
             }}
-          />
-        </label>
-        <button type="button" className="btn" onClick={clear} disabled={!fileName && !preview}>
-          Clear
-        </button>
-        <button
-          type="button"
-          className="btn"
-          onClick={() => {
-            if (preview && preview.errors.length === 0 && !importing) {
-              const text = fileTextRef.current ?? ''
-              const signature = `${fileName ?? ''}:${text.length}:${simpleHash(text)}`
-              if (signature !== '' && signature === lastImportedSignature) {
-                return
-              }
-              setImporting(true)
-              setImportError(null)
-              const saved = saveImportedTargetCompanies(preview)
-              if (saved) {
-                setImported(loadImportedTargetCompanies())
-                setLastImportedSignature(signature)
+            disabled={!preview || preview.errors.length > 0 || importing}
+          >
+            {importing ? 'Importing...' : 'Confirm import'}
+          </button>
+
+          <button type="button" className="btn btn--outline" onClick={clear} disabled={!fileName && !preview}>
+            Clear
+          </button>
+
+          <button
+            type="button"
+            className="btn btn--outline"
+            onClick={() => {
+              if (clearImportedTargetCompanies()) {
+                setImported(null)
+                setImportError(null)
               } else {
-                setImportError('The CSV could not be saved in this browser. Your existing imported companies were not changed.')
+                setImportError('The imported companies could not be removed from this browser.')
               }
-              setImporting(false)
-            }
-          }}
-          disabled={!preview || preview.errors.length > 0 || importing}
-        >
-          {importing ? 'Importing...' : 'Confirm import'}
-        </button>
-        <button
-          type="button"
-          className="btn"
-          onClick={() => {
-            if (clearImportedTargetCompanies()) {
-              setImported(null)
-              setImportError(null)
-            } else {
-              setImportError('The imported companies could not be removed from this browser.')
-            }
-          }}
-          disabled={!imported}
-        >
-          Remove imported set
-        </button>
+            }}
+            disabled={!imported}
+          >
+            Remove imported set
+          </button>
+        </div>
+
         {fileName ? (
-          <span className="target-companies__filename">
-            Selected file: <strong>{fileName}</strong>
-          </span>
+          <div className="target-companies__filename sn-upload-file-pill">
+            <span>Selected file:</span> <strong>{fileName}</strong>
+          </div>
+        ) : null}
+
+        {imported && !fileName ? (
+          <div className="sn-upload-active-card">
+            <div className="sn-upload-active-card__info">
+              <span className="sn-upload-active-card__indicator" />
+              <span>
+                <strong>{imported.rowCount} Target Companies</strong> active &amp; ready for Discovery
+              </span>
+            </div>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+              Saved locally in this browser
+            </span>
+          </div>
         ) : null}
       </div>
 
-      {preview ? (
-        <p className="target-companies__status" role="status">
-          {hasErrors
-            ? 'CSV validation found errors. Existing imported companies are unchanged.'
-            : `CSV validated: ${preview.rowCount} company record${preview.rowCount === 1 ? '' : 's'} ready to import.`}
-        </p>
-      ) : (
-        <p className="target-companies__status" role="status">
-          No CSV selected. Existing imported companies are preserved.
-        </p>
-      )}
-      {importError !== null ? (
-        <p className="target-companies__errors" role="alert">
-          {importError}
-        </p>
-      ) : null}
+      <div className="sn-upload-status-group">
+        {preview ? (
+          <p className="target-companies__status" role="status">
+            {hasErrors
+              ? 'CSV validation found errors. Existing imported companies are unchanged.'
+              : `CSV validated: ${preview.rowCount} company record${preview.rowCount === 1 ? '' : 's'} ready to import.`}
+          </p>
+        ) : (
+          <p className="target-companies__status" role="status">
+            No CSV selected. Existing imported companies are preserved.
+          </p>
+        )}
+
+        {imported ? (
+          <p className="target-companies__status" role="status">
+            Imported companies saved in this browser: {imported.rowCount}. The import is available after refresh,
+            is not shared across users, and is not written to the production Vault.
+          </p>
+        ) : null}
+
+        {importError !== null ? (
+          <p className="target-companies__errors" role="alert">
+            {importError}
+          </p>
+        ) : null}
+      </div>
 
       {preview && preview.errors.length > 0 ? (
         <div className="target-companies__errors" role="alert" aria-live="assertive">
@@ -252,13 +321,6 @@ export default function TargetCompaniesUpload({
           Cell quality: supplied values are shown as entered; empty cells are missing/empty; rows with a
           different cell count than the header are marked malformed. Syntactic validation is not identity
           verification and does not establish company relevance.
-        </p>
-      ) : null}
-
-      {imported ? (
-        <p className="target-companies__status" role="status">
-          Imported companies saved in this browser: {imported.rowCount}. The import is available after refresh,
-          is not shared across users, and is not written to the production Vault.
         </p>
       ) : null}
     </section>

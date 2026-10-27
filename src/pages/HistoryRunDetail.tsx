@@ -46,7 +46,7 @@ export default function HistoryRunDetail() {
   return (
     <section className="page">
       <nav className="crumbs" aria-label="Back">
-        <Link to="/discovery">Discovery</Link>
+        <Link to="/discovery">Discovery</Link> / <Link to="/history">Run History</Link>
       </nav>
       <header className="page__header">
         <h1 className="page__title">

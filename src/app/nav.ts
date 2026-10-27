@@ -6,3 +6,4 @@ export interface NavLink {
 
 export const primaryLink: NavLink = { to: '/discovery', label: 'Discovery' }
 export const supportingLinks: NavLink[] = [{ to: '/companies', label: 'Companies' }]
+

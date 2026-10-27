@@ -25,7 +25,10 @@ export default function TopNav() {
       <div className="topnav__inner">
         <Link to="/" className="topnav__brand" aria-label="TVB Opportunity Intelligence">
           <span className="topnav__mark" aria-hidden="true" />
-          <span className="topnav__brand-name">TVB Opportunity Intelligence</span>
+          <span className="topnav__brand-wrap">
+            <span className="topnav__brand-name">TVB</span>
+            <span className="topnav__brand-sub">Opportunity Intelligence</span>
+          </span>
         </Link>
 
         <button
@@ -61,6 +64,20 @@ export default function TopNav() {
               {link.label}
             </NavLink>
           ))}
+
+          <NavLink
+            to="/history"
+            className={({ isActive }) => `topnav__link${isActive ? ' topnav__link--active' : ''}`}
+          >
+            Run History
+          </NavLink>
+
+          <NavLink
+            to="/logs"
+            className={({ isActive }) => `topnav__link${isActive ? ' topnav__link--active' : ''}`}
+          >
+            Logs
+          </NavLink>
 
           <div className="topnav__actions">
             <ThemeToggle />

@@ -89,7 +89,10 @@ function writeAll(storage: AssociationStorage | null, associations: readonly Com
   }
 }
 
+import { COMPANY_DIRECTORY_NAMES } from '../data/company-directory-names'
+
 function isKnownCompany(companyId: string): boolean {
+  if ((COMPANY_DIRECTORY_NAMES as readonly string[]).includes(companyId)) return true
   const imported = loadImportedTargetCompanies()
   return (
     imported !== null &&

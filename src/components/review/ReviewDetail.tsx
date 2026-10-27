@@ -17,11 +17,14 @@ import { ReviewStatusBadge } from './ReviewStatusBadge'
 import { rfpDisplay } from '../vocabulary'
 import { DOMAIN_LABEL, REVIEW_STATUS_LABEL, companyLabelForReview, deadlineOf, publicationDateOf } from './labels'
 import { FTS_LIVE_POOL_COMPANY_ID } from '../../live-source/live-discovery'
+import { COMPANY_DIRECTORY_NAMES } from '../../data/company-directory-names'
 
 function availableCompanyNames(): string[] {
   const imported = loadImportedTargetCompanies()
   const importedNames = imported ? csvPreviewToTargetCompanies(imported).map((company) => company.name) : []
-  return [...new Set(importedNames)]
+  return [...new Set([...importedNames, ...COMPANY_DIRECTORY_NAMES])].sort((a, b) =>
+    a.localeCompare(b, 'en', { sensitivity: 'base' }),
+  )
 }
 
 /**

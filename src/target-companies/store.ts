@@ -65,79 +65,19 @@ export function loadImportedTargetCompanies(): CsvPreview | null {
       session?.getItem(TARGET_COMPANIES_STORAGE_KEY) ??
       null,
   )
-  const legacy = legacyPersistent === null
-    ? legacySession
-    : legacySession === null
-      ? legacyPersistent
-      : mergePreviews(legacyPersistent, legacySession)
-  if (legacy !== null && persistent !== null) {
-    try {
-      persistent.setItem(TARGET_COMPANIES_STORAGE_KEY, JSON.stringify(legacy))
-    } catch {
-      return legacy
+  if (legacyPersistent !== null) {
+    if (persistent !== null) {
+      try { persistent.setItem(TARGET_COMPANIES_STORAGE_KEY, JSON.stringify(legacyPersistent)) } catch {}
     }
+    return legacyPersistent
   }
-  return legacy
-}
-
-function normalizedHeader(header: string): string {
-  return header.trim().replace(/\s+/g, ' ').toLocaleLowerCase()
-}
-
-function companyNameIndex(headers: readonly string[]): number {
-  return headers.findIndex((header) => /company.*name|^name$|legal name/i.test(header.trim()))
-}
-
-function companyName(preview: CsvPreview, row: readonly string[]): string | null {
-  const index = companyNameIndex(preview.headers)
-  const name = index < 0 ? '' : (row[index] ?? '').trim()
-  return name === '' ? null : name.toLocaleLowerCase()
-}
-
-function mergePreviews(existing: CsvPreview | null, incoming: CsvPreview): CsvPreview {
-  if (existing === null || existing.rows.length === 0) return { ...incoming, errors: [] }
-
-  const headers = [...existing.headers]
-  const indexes = new Map(headers.map((header, index) => [normalizedHeader(header), index]))
-  for (const header of incoming.headers) {
-    const key = normalizedHeader(header)
-    if (!indexes.has(key)) {
-      indexes.set(key, headers.length)
-      headers.push(header)
+  if (legacySession !== null) {
+    if (persistent !== null) {
+      try { persistent.setItem(TARGET_COMPANIES_STORAGE_KEY, JSON.stringify(legacySession)) } catch {}
     }
+    return legacySession
   }
-  const align = (source: CsvPreview, row: readonly string[]): string[] => {
-    const aligned = Array.from({ length: headers.length }, () => '')
-    source.headers.forEach((header, index) => {
-      const target = indexes.get(normalizedHeader(header))
-      if (target !== undefined) aligned[target] = row[index] ?? ''
-    })
-    return aligned
-  }
-
-  const rows = existing.rows.map((row) => align(existing, row))
-  const knownRows = new Map<string, number>()
-  existing.rows.forEach((row, index) => {
-    const name = companyName(existing, row)
-    if (name !== null) knownRows.set(name, index)
-  })
-  for (const sourceRow of incoming.rows) {
-    const row = align(incoming, sourceRow)
-    const name = companyName(incoming, sourceRow)
-    const existingIndex = name === null ? undefined : knownRows.get(name)
-    if (existingIndex === undefined) {
-      rows.push(row)
-      if (name !== null) knownRows.set(name, rows.length - 1)
-      continue
-    }
-    const prior = rows[existingIndex]
-    if (prior !== undefined) {
-      for (let index = 0; index < row.length; index += 1) {
-        if ((prior[index] ?? '').trim() === '' && (row[index] ?? '').trim() !== '') prior[index] = row[index] ?? ''
-      }
-    }
-  }
-  return { headers, rows, rowCount: rows.length, errors: [] }
+  return null
 }
 
 export function saveImportedTargetCompanies(preview: CsvPreview): boolean {
@@ -145,8 +85,7 @@ export function saveImportedTargetCompanies(preview: CsvPreview): boolean {
   if (persistent === null) return false
   let serialized: string
   try {
-    const merged = mergePreviews(loadImportedTargetCompanies(), preview)
-    serialized = JSON.stringify(merged)
+    serialized = JSON.stringify({ ...preview, errors: [] })
     persistent.setItem(TARGET_COMPANIES_STORAGE_KEY, serialized)
   } catch {
     return false

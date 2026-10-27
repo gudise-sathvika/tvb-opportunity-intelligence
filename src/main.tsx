@@ -5,6 +5,7 @@ import App from './app/App'
 import './styles/tokens.css'
 import './styles/global.css'
 import './styles/components.css'
+import './styles/safarnav.css'
 
 const container = document.getElementById('root')
 if (!container) {

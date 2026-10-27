@@ -69,7 +69,7 @@ test('migrates legacy persistent imports without discarding the original value',
   })
 })
 
-test('merges imports by company name, preserves existing values, and adds supplied missing fields', () => {
+test('replaces the active imported set instead of merging', () => {
   withStorage(() => {
     assert.equal(
       saveImportedTargetCompanies(preview(['Company Name', 'Country'], [['ContextQA', 'US']])),
@@ -82,10 +82,10 @@ test('merges imports by company name, preserves existing values, and adds suppli
       true,
     )
     assert.deepEqual(loadImportedTargetCompanies(), {
-      headers: ['Company Name', 'Country', 'sector'],
+      headers: ['company name', 'sector'],
       rows: [
-        ['ContextQA', 'US', 'AI'],
-        ['Northfield', '', 'Robotics'],
+        ['contextqa', 'AI'],
+        ['Northfield', 'Robotics'],
       ],
       rowCount: 2,
       errors: [],

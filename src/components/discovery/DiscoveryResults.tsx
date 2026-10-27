@@ -635,7 +635,7 @@ export default function DiscoveryResults({ outcome }: { outcome: DiscoveryRunOut
         </Link>
         {outcome.needsReview > 0 ? (
           <Link
-            to={`/discovery?view=human-review&run=${encodeURIComponent(outcome.runId)}`}
+            to={`/review?run=${encodeURIComponent(outcome.runId)}`}
             className="btn"
           >
             Review {outcome.needsReview} {outcome.needsReview === 1 ? 'candidate' : 'candidates'}

@@ -8,64 +8,113 @@
  */
 
 :root {
-  --bg: #f6f1e7;
-  --surface: #fffdf8;
-  --surface-2: #f1ead9;
-  --border: #ddd2bd;
-  --border-strong: #c8b99a;
-  --text: #26201a;
-  --text-muted: #6f6555;
-  --accent: #7a1f2b;
-  --accent-strong: #5e1620;
-  --accent-soft: #f3e4e6;
-  --gold: #b08a3e;
-  --warn-bg: #fff3d6;
-  --warn-border: #d9a441;
-  --warn-text: #7a5600;
-  --focus: #9c2340;
-  --shadow-1: 0 1px 2px rgba(38, 32, 26, 0.06), 0 6px 18px rgba(38, 32, 26, 0.05);
-  --shadow-2: 0 2px 6px rgba(38, 32, 26, 0.09), 0 16px 40px rgba(38, 32, 26, 0.08);
-  --chart-1: #7a1f2b;
-  --chart-2: #155e63;
-  --chart-3: #9a6a00;
-  --chart-4: #5b4b8a;
-  --chart-5: #1d4ed8;
-  --chart-6: #8a6d3b;
-  --chart-7: #3f6212;
-  --chart-8: #6b6250;
-  --chart-blank: #94a3b8;
-  --chart-track: #ece4d4;
-  --motion-fast: 0.12s;
-  --radius: 10px;
+  /* Neutral light-first palette */
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --surface-2: #f1f5f9;
+  --surface-3: #e2e8f0;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --text-subtle: #94a3b8;
+
+  /* Restrained Indigo / Blue Accents */
+  --accent: #2563eb;
+  --accent-strong: #1d4ed8;
+  --accent-soft: #eff6ff;
+  --accent-rgb: 37, 99, 235;
+  --gold: #d97706;
+
+  /* Semantic feedback colors */
+  --success: #10b981;
+  --success-bg: #ecfdf5;
+  --success-border: #a7f3d0;
+  --success-text: #065f46;
+
+  --warn-bg: #fffbeb;
+  --warn-border: #fde68a;
+  --warn-text: #92400e;
+
+  --error: #ef4444;
+  --error-bg: #fef2f2;
+  --error-border: #fecaca;
+  --error-text: #991b1b;
+
+  --focus: #3b82f6;
+  --focus-ring: rgba(59, 130, 246, 0.35);
+
+  /* Elevation and shadows */
+  --shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.05);
+  --shadow-1: 0 1px 3px 0 rgba(15, 23, 42, 0.08), 0 1px 2px -1px rgba(15, 23, 42, 0.06);
+  --shadow-2: 0 4px 6px -1px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.04);
+
+  /* Chart & domain visual indicators */
+  --chart-1: #2563eb;
+  --chart-2: #059669;
+  --chart-3: #d97706;
+  --chart-4: #7c3aed;
+  --chart-5: #0284c7;
+  --chart-6: #db2777;
+  --chart-7: #475569;
+  --chart-8: #ca8a04;
+  --chart-blank: #cbd5e1;
+  --chart-track: #f1f5f9;
+
+  --motion-fast: 0.15s ease-in-out;
+  --radius: 8px;
   --radius-sm: 6px;
+  --radius-lg: 12px;
 }
 
 [data-theme='dark'] {
-  --bg: #0c1424;
-  --surface: #16223a;
-  --surface-2: #101a2e;
-  --border: #2c3b57;
-  --border-strong: #3d5073;
-  --text: #f2ede4;
-  --text-muted: #a9b4c9;
-  --accent: #6d9ee8;
-  --accent-strong: #8db6f0;
-  --accent-soft: #1b2c4a;
-  --gold: #d8b25f;
-  --warn-bg: #2a2410;
-  --warn-border: #c79a3a;
-  --warn-text: #f0d79a;
-  --focus: #8db6f0;
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 6px 18px rgba(0, 0, 0, 0.28);
-  --shadow-2: 0 2px 8px rgba(0, 0, 0, 0.35), 0 18px 44px rgba(0, 0, 0, 0.34);
-  --chart-1: #e0a4ad;
-  --chart-2: #7fd4d9;
-  --chart-3: #e6c877;
-  --chart-4: #b7a8e0;
-  --chart-5: #93b4f5;
-  --chart-6: #d8c19a;
-  --chart-7: #a6c47a;
-  --chart-8: #cbd5e1;
-  --chart-blank: #64748b;
-  --chart-track: #263449;
+  --bg: #090d16;
+  --surface: #111827;
+  --surface-2: #1e293b;
+  --surface-3: #334155;
+  --border: #1e293b;
+  --border-strong: #334155;
+  --text: #f8fafc;
+  --text-muted: #94a3b8;
+  --text-subtle: #64748b;
+
+  --accent: #60a5fa;
+  --accent-strong: #93c5fd;
+  --accent-soft: #172554;
+  --accent-rgb: 96, 165, 250;
+  --gold: #fbbf24;
+
+  --success: #34d399;
+  --success-bg: #064e3b;
+  --success-border: #047857;
+  --success-text: #a7f3d0;
+
+  --warn-bg: #451a03;
+  --warn-border: #78350f;
+  --warn-text: #fde68a;
+
+  --error: #f87171;
+  --error-bg: #450a0a;
+  --error-border: #7f1d1d;
+  --error-text: #fecaca;
+
+  --focus: #60a5fa;
+  --focus-ring: rgba(96, 165, 250, 0.4);
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --shadow-1: 0 1px 3px 0 rgba(0, 0, 0, 0.4), 0 1px 2px -1px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.5);
+
+  --chart-1: #60a5fa;
+  --chart-2: #34d399;
+  --chart-3: #fbbf24;
+  --chart-4: #a78bfa;
+  --chart-5: #38bdf8;
+  --chart-6: #f472b6;
+  --chart-7: #94a3b8;
+  --chart-8: #facc15;
+  --chart-blank: #475569;
+  --chart-track: #1e293b;
 }

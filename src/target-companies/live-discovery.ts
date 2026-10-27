@@ -90,7 +90,13 @@ export async function runTargetCompanyGrantsGovDiscovery(
   const errors: string[] = []
 
   for (const term of uniqueTerms) {
-    const response = await requester(term)
+    let response: GrantsGovBridgeSearchResponse
+    try {
+      response = await requester(term)
+    } catch (error) {
+      errors.push(`Grants.gov request failed: ${error instanceof Error ? error.message : String(error)}`)
+      continue
+    }
     if (!response.ok) {
       errors.push(...response.errors.map((error) => error.message))
       continue
@@ -178,7 +184,13 @@ export async function runTargetCompanyEuSediaDiscovery(
   const errors: string[] = []
 
   for (const term of uniqueTerms) {
-    const response = await requester(term)
+    let response: EuSediaBridgeSearchResponse
+    try {
+      response = await requester(term)
+    } catch (error) {
+      errors.push(`EU Funding & Tenders request failed: ${error instanceof Error ? error.message : String(error)}`)
+      continue
+    }
     if (!response.ok) {
       errors.push(...response.errors.map((error) => error.message))
       continue
@@ -318,6 +330,54 @@ export async function runTargetCompanyTedDiscovery(
     sourceResults: [{ source: 'ted', queries: uniqueTerms, recordCount: records.length, errors }],
     newRecordCount: records.length,
   }
+}
+
+export interface OpportunityAssessmentGroup {
+  readonly key: string
+  readonly opportunityId: string
+  readonly opportunityTitle: string
+  readonly source: string
+  readonly opportunityType: TargetOpportunityInput['opportunityType']
+  readonly assessments: readonly TargetRelevanceResult[]
+}
+
+export function groupTargetRecommendations(recommendations: readonly TargetRelevanceResult[]): OpportunityAssessmentGroup[] {
+  const map = new Map<string, OpportunityAssessmentGroup & { assessments: TargetRelevanceResult[] }>()
+  let ungroupedIndex = 0
+  for (const recommendation of recommendations) {
+    let sourceHost: string | null = null
+    try {
+      const url = new URL(recommendation.sourceUrl)
+      if (url.protocol === 'https:' || url.protocol === 'http:') sourceHost = url.hostname.toLowerCase()
+    } catch {}
+    const opportunityId = recommendation.opportunityId.trim()
+    const canonicalKey =
+      sourceHost !== null && opportunityId !== ''
+        ? JSON.stringify([sourceHost, opportunityId])
+        : null
+    const key = canonicalKey ?? `unidentified:${ungroupedIndex++}`
+    const existing = map.get(key)
+    if (existing === undefined) {
+      map.set(key, {
+        key,
+        opportunityId: recommendation.opportunityId,
+        opportunityTitle: recommendation.opportunityTitle,
+        source: sourceHost ?? 'Unknown source',
+        opportunityType: recommendation.opportunityType,
+        assessments: [recommendation],
+      })
+    } else {
+      const companyId = recommendation.companyId.trim()
+      const companyName = recommendation.companyName.trim()
+      const alreadyAssessed =
+        companyId !== ''
+          ? existing.assessments.some((assessment) => assessment.companyId.trim() === companyId)
+          : companyName !== '' &&
+            existing.assessments.some((assessment) => assessment.companyId.trim() === '' && assessment.companyName.trim() === companyName)
+      if (!alreadyAssessed) existing.assessments.push(recommendation)
+    }
+  }
+  return [...map.values()]
 }
 
 export function firstImportedTargetCompany(): TargetCompanyMatchInput | null {

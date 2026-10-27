@@ -334,6 +334,7 @@ function ReviewSection({
                     demo={demo}
                     runId={runScope}
                     workspaceView={workspaceView}
+                    basePath={basePath}
                   />
                 ))}
               </tbody>
@@ -376,11 +377,13 @@ function ReviewRow({
   demo,
   runId,
   workspaceView,
+  basePath = '/discovery',
 }: {
   entry: ReviewItem
   demo: boolean
   runId: string | null
   workspaceView: string
+  basePath?: string
 }) {
   const published = publicationDateOf(entry)
   const deadline = deadlineOf(entry)
@@ -388,11 +391,12 @@ function ReviewRow({
   // Phase 15B: preserve the run scope so the detail page can link back to the
   // exact historical run and its run-scoped queue.
   const detailQuery = new URLSearchParams()
-  detailQuery.set('view', workspaceView)
-  if (demo) detailQuery.set(REVIEW_DEMO_PARAM, REVIEW_DEMO_VALUE)
   if (runId !== null && runId.trim() !== '') detailQuery.set('run', runId.trim())
+  if (workspaceView) detailQuery.set('view', workspaceView)
+  if (demo) detailQuery.set(REVIEW_DEMO_PARAM, REVIEW_DEMO_VALUE)
   const detailQueryString = detailQuery.toString()
-  const detailPath = `/discovery/review/${encodeURIComponent(entry.reviewId)}${detailQueryString ? `?${detailQueryString}` : ''}`
+  const detailBasePath = basePath === '/review' ? '/review' : '/discovery/review'
+  const detailPath = `${detailBasePath}/${encodeURIComponent(entry.reviewId)}${detailQueryString ? `?${detailQueryString}` : ''}`
   const association = listAssociations().find((item) => item.reviewId === entry.reviewId)
   const companyId = association?.companyId ?? entry.companyId
   return (
