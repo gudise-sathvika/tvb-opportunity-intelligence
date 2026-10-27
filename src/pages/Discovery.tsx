@@ -250,9 +250,6 @@ export default function Discovery() {
       <header className="page__header">
         <h1 className="page__title" id="discovery-page-title">
           TVB Opportunity Intelligence
-          <span className="sn-brand-badge" title="SafarNav Discovery Engine">
-            SafarNav
-          </span>
         </h1>
         <p className="page__description">
           Opportunity intelligence and discovery automation for your target portfolio companies.
@@ -299,30 +296,6 @@ export default function Discovery() {
           </div>
           <span className="sn-stat-card__value">4</span>
           <span className="sn-stat-card__meta">Grants.gov · EU SEDIA · TED · USA</span>
-        </div>
-      </div>
-
-      {/* Action Shortcuts */}
-      <div className="sn-quick-actions">
-        <div className="sn-quick-actions__intro">
-          <h2 className="sn-quick-actions__title">Discovery &amp; Portfolio Shortcuts</h2>
-          <p className="sn-quick-actions__desc">
-            Import your target company CSV, execute automated discovery across government grants and procurement notices, or evaluate candidates in the human review queues.
-          </p>
-        </div>
-        <div className="sn-quick-actions__buttons">
-          <Link to="/companies" className="btn btn--outline">
-            Browse Companies
-          </Link>
-          <Link to="/discovery?view=human-review" className="btn btn--outline">
-            Review Queue
-          </Link>
-          <Link to="/history" className="btn btn--outline">
-            Run History
-          </Link>
-          <Link to="/logs" className="btn btn--outline">
-            Execution Logs
-          </Link>
         </div>
       </div>
 
