@@ -234,7 +234,33 @@ export default function TargetCompanyLiveDiscovery() {
     setPage(0)
   }
 
-  if (profiles.length === 0) return null
+  if (profiles.length === 0) {
+    return (
+      <div
+        className="card sn-discovery-empty-card"
+        style={{
+          padding: '32px 24px',
+          margin: '20px 0 28px',
+          textAlign: 'center',
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-lg, 12px)',
+        }}
+      >
+        <div style={{ fontSize: '32px', marginBottom: '12px' }}>🎯</div>
+        <div style={{ fontWeight: 700, fontSize: '16.5px', color: 'var(--text)', marginBottom: '6px' }}>
+          Ready to Discover Opportunities
+        </div>
+        <p style={{ fontSize: '13.5px', color: 'var(--text-muted)', margin: '0 auto 16px', maxWidth: '540px', lineHeight: 1.5 }}>
+          Upload a target company CSV above (5–50 companies) to unlock automated multi-source discovery across Grants.gov, EU SEDIA, and TED Procurement tenders with explainable suitability scoring.
+        </p>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: 'var(--text-muted)', background: 'var(--surface-2)', padding: '6px 16px', borderRadius: '999px', border: '1px solid var(--border)' }}>
+          <span>💡 Tip:</span>
+          <span>Click <strong>Browse your computer</strong> in the box above to load your company list.</span>
+        </div>
+      </div>
+    )
+  }
 
   const hasSourceErrors = sourceErrors.length > 0
 

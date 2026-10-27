@@ -271,7 +271,7 @@ export default function CompaniesTable({ headingAs = 'h1' }: { headingAs?: 'h1' 
           </h2>
         )}
         <p className="page__description">
-          The company and organization directory available to SafarNav. Imported target company fields
+          The company and organization directory available to TVB Opportunity Intelligence. Imported target company fields
           (URL, HQ location, Sector, ICP, and capabilities) and verified approved opportunities are inspectable below.
         </p>
       </header>

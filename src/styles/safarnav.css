@@ -1283,7 +1283,7 @@ thead th.sn-matrix-th--sticky {
   justify-content: center;
   padding: 36px 24px 28px 24px;
   background: var(--surface);
-  border: 2px dashed #cbd5e1;
+  border: 2px dashed var(--border-strong, #cbd5e1);
   border-radius: var(--radius-lg, 12px);
   text-align: center;
   transition: all var(--motion-normal, 0.2s ease);
