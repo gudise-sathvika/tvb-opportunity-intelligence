@@ -89,10 +89,6 @@ export default function TargetCompaniesUpload({
         <h2 className="page__title page__title--sub" id="target-companies-heading">
           {heading}
         </h2>
-        <p className="page__description">
-          Import a validated CSV of {TARGET_COMPANY_ROW_MIN}–{TARGET_COMPANY_ROW_MAX} companies. Imported
-          records are saved in this browser and used in Discovery; the existing company directory is unchanged.
-        </p>
       </header>
 
       {/* Modern Rectangular Upload Dropzone Box */}
