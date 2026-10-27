@@ -23,8 +23,9 @@ export default function Logs() {
   const [sourceFilter, setSourceFilter] = useState<string>('all')
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
+  const runs = listDiscoveryRuns()
+
   const entries: LogEntry[] = useMemo(() => {
-    const runs = listDiscoveryRuns()
     const out: LogEntry[] = []
 
     runs.forEach((entry, runIdx) => {
@@ -78,7 +79,7 @@ export default function Logs() {
     })
 
     return out
-  }, [])
+  }, [runs])
 
   const sources = useMemo(() => {
     const set = new Set<string>()

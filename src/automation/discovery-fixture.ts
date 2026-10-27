@@ -298,6 +298,29 @@ let historyState: readonly DiscoveryRunOutcome[] = deepFreeze([])
 
 function nextRunId(): string {
   runCounter += 1
+  try {
+    if (typeof globalThis.sessionStorage !== 'undefined') {
+      const raw = globalThis.sessionStorage.getItem('tvb.discovery.runs.v1')
+      if (raw) {
+        const parsed: unknown = JSON.parse(raw)
+        if (Array.isArray(parsed)) {
+          for (const item of parsed) {
+            if (item && typeof item === 'object' && typeof (item as Record<string, unknown>)['runId'] === 'string') {
+              const match = ((item as Record<string, unknown>)['runId'] as string).match(/^RUN-G-(\d+)$/)
+              if (match) {
+                const num = parseInt(match[1], 10)
+                if (num >= runCounter) {
+                  runCounter = num + 1
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch {
+    // Fall back to memory counter
+  }
   return `RUN-G-${String(runCounter).padStart(4, '0')}`
 }
 

@@ -14,12 +14,38 @@ import {
   runTargetCompanyTedDiscovery,
 } from '../../target-companies/live-discovery'
 import type { TargetCompanyLiveDiscoveryResult } from '../../target-companies/live-discovery'
+import { loadPersistedRuns, persistRunOutcome } from '../../live-source/persisted-runs'
+import type { DiscoveryCompanyResult, DiscoveryRunOutcome } from '../../automation/discovery-fixture'
 import MatchMatrix from './MatchMatrix'
+
+const TARGET_RESULTS_KEY = 'tvb.target-company-results.v1'
+
+function loadCachedResults(): TargetCompanyLiveDiscoveryResult[] {
+  try {
+    if (typeof sessionStorage === 'undefined') return []
+    const raw = sessionStorage.getItem(TARGET_RESULTS_KEY)
+    if (!raw) return []
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed) ? (parsed as TargetCompanyLiveDiscoveryResult[]) : []
+  } catch {
+    return []
+  }
+}
+
+function saveCachedResults(results: TargetCompanyLiveDiscoveryResult[]): void {
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem(TARGET_RESULTS_KEY, JSON.stringify(results))
+    }
+  } catch {
+    // Ignore storage failures
+  }
+}
 
 export default function TargetCompanyLiveDiscovery() {
   const imported = loadImportedTargetCompanies()
   const profiles = imported ? csvPreviewToTargetCompanies(imported) : []
-  const [results, setResults] = useState<TargetCompanyLiveDiscoveryResult[]>([])
+  const [results, setResults] = useState<TargetCompanyLiveDiscoveryResult[]>(() => loadCachedResults())
   const [running, setRunning] = useState(false)
   const [runError, setRunError] = useState<string | null>(null)
   const [discoveryScope, setDiscoveryScope] = useState<'grants' | 'rfps' | 'all'>('grants')
@@ -131,6 +157,15 @@ export default function TargetCompanyLiveDiscovery() {
     setRunning(true)
     setRunError(null)
     try {
+      const runTime = new Date().toISOString()
+      const existingRuns = loadPersistedRuns()
+      let counter = existingRuns.length + 1
+      let currentRunId = `RUN-LIVE-${String(counter).padStart(4, '0')}`
+      while (existingRuns.some((r) => r.runId === currentRunId)) {
+        counter++
+        currentRunId = `RUN-LIVE-${String(counter).padStart(4, '0')}`
+      }
+
       const nextResults: TargetCompanyLiveDiscoveryResult[] = []
       for (const profile of profiles) {
         const grantsRequester = async (term: string): Promise<GrantsGovBridgeSearchResponse> => {
@@ -138,7 +173,7 @@ export default function TargetCompanyLiveDiscovery() {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({
-              runId: 'target-company-live',
+              runId: currentRunId,
               companyId: profile.companyId,
               keyword: term,
               oppStatuses: 'posted',
@@ -153,7 +188,7 @@ export default function TargetCompanyLiveDiscovery() {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({
-              runId: 'target-company-live',
+              runId: currentRunId,
               companyId: profile.companyId,
               keyword: term,
               limit: 100,
@@ -171,7 +206,7 @@ export default function TargetCompanyLiveDiscovery() {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({
-              runId: 'target-company-live',
+              runId: currentRunId,
               companyId: profile.companyId,
               keyword: term,
               publishedSince,
@@ -202,6 +237,83 @@ export default function TargetCompanyLiveDiscovery() {
         }
       }
       setResults(nextResults)
+      saveCachedResults(nextResults)
+
+      // Persist run outcome to session history and logs
+      const allRecords = nextResults.flatMap((r) => r.records)
+      const allSourceResults = nextResults.flatMap((r) => r.sourceResults)
+      const allRecommendations = nextResults.flatMap((r) => r.recommendations)
+      const hasErrors = nextResults.some((r) => r.errors.length > 0 || r.sourceResults.some((s) => s.errors.length > 0))
+
+      const companyResults: DiscoveryCompanyResult[] = nextResults.map((r) => {
+        const compRecs = r.records.length
+        const compErrors = r.errors.length
+        const compNeedsReview = r.recommendations.filter((rec) => rec.outcome !== 'not_relevant').length
+        return {
+          companyId: r.profile.name || r.profile.companyId,
+          domain: discoveryScope === 'rfps' ? 'procurement' : 'funding',
+          runId: currentRunId,
+          requestedAt: runTime,
+          completedAt: new Date().toISOString(),
+          scenario: 'live',
+          outcome: compErrors > 0 ? (compRecs > 0 ? 'PARTIAL' : 'FAILED') : compRecs === 0 ? 'NO_RESULTS' : 'SUCCESS',
+          counts: {
+            totalSources: r.sourceResults.length,
+            candidatesReceived: r.sourceResults.reduce((sum, s) => sum + s.recordCount, 0),
+            candidatesCreated: compRecs,
+            candidatesRequiringReview: compNeedsReview,
+            duplicates: 0,
+            blockedSources: 0,
+            failedSources: compErrors > 0 ? 1 : 0,
+          },
+          needsReview: compNeedsReview,
+          sourceResults: r.sourceResults.map((s) => ({
+            sourceId: s.source === 'grantsgov' ? 'SU-GRANTS-001' : s.source === 'eu-sedia' ? 'SU-EU-SEDIA-001' : 'SU-TED-001',
+            sourceName: s.source === 'grantsgov' ? 'Grants.gov' : s.source === 'eu-sedia' ? 'EU SEDIA' : 'TED Procurement',
+            adapterType: s.source,
+            domain: s.source === 'ted' ? 'procurement' : 'funding',
+            accessState: 'AVAILABLE' as const,
+            outcome: s.errors.length > 0 ? (s.recordCount > 0 ? 'PARTIAL' : 'FAILED') : s.recordCount === 0 ? 'NO_RESULTS' : 'SUCCESS',
+            requestedAt: runTime,
+            observedAt: runTime,
+            candidatesReceived: s.recordCount,
+            candidatesCreated: s.recordCount,
+            candidatesRequiringReview: compNeedsReview,
+            duplicates: 0,
+            candidateIds: [],
+            errors: [...s.errors],
+            warnings: [],
+          })),
+          candidates: [],
+        }
+      })
+
+      const runOutcome: DiscoveryRunOutcome = {
+        runId: currentRunId,
+        domain: discoveryScope === 'rfps' ? 'procurement' : 'funding',
+        scenario: 'live',
+        requestedAt: runTime,
+        completedAt: new Date().toISOString(),
+        companyIds: profiles.map((p) => p.name || p.companyId),
+        companies: companyResults,
+        counts: {
+          totalSources: allSourceResults.length,
+          candidatesReceived: allSourceResults.reduce((sum, s) => sum + s.recordCount, 0),
+          candidatesCreated: allRecords.length,
+          candidatesRequiringReview: allRecommendations.filter((rec) => rec.outcome !== 'not_relevant').length,
+          duplicates: 0,
+          blockedSources: 0,
+          failedSources: nextResults.filter((r) => r.errors.length > 0).length,
+        },
+        needsReview: allRecommendations.filter((rec) => rec.outcome !== 'not_relevant').length,
+        outcome: hasErrors ? (allRecords.length > 0 ? 'PARTIAL' : 'FAILED') : allRecords.length === 0 ? 'NO_RESULTS' : 'SUCCESS',
+        reviewQueue: [],
+        sector: 'all',
+        keyword: search.trim(),
+        location: 'all',
+      }
+
+      persistRunOutcome(runOutcome)
     } catch (error) {
       setRunError(error instanceof Error ? error.message : String(error))
     } finally {

@@ -130,6 +130,27 @@ export function createLiveUsaSpendingDiscovery(options: {
 
   function nextRunId(): string {
     runCounter += 1
+    try {
+      if (typeof globalThis.sessionStorage !== 'undefined') {
+        const raw = globalThis.sessionStorage.getItem('tvb.discovery.runs.v1')
+        if (raw) {
+          const parsed: unknown = JSON.parse(raw)
+          if (Array.isArray(parsed)) {
+            for (const item of parsed) {
+              if (item && typeof item === 'object' && typeof (item as Record<string, unknown>)['runId'] === 'string') {
+                const match = ((item as Record<string, unknown>)['runId'] as string).match(new RegExp(`^${USA_LIVE_RUN_ID_PREFIX}-(\\d+)$`))
+                if (match) {
+                  const num = parseInt(match[1], 10)
+                  if (num >= runCounter) runCounter = num + 1
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      // Fall back
+    }
     return `${USA_LIVE_RUN_ID_PREFIX}-${String(runCounter).padStart(4, '0')}`
   }
 

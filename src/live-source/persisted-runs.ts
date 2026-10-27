@@ -55,8 +55,19 @@ export function persistRunOutcome(outcome: DiscoveryRunOutcome): void {
   try {
     const raw = store.getItem(STORAGE_KEY)
     const parsed: unknown = raw === null ? [] : JSON.parse(raw)
-    const kept = (Array.isArray(parsed) ? parsed : []).filter(isRunOutcome).filter((entry) => entry.runId !== outcome.runId)
-    kept.push(outcome)
+    const existing = (Array.isArray(parsed) ? parsed : []).filter(isRunOutcome)
+    let finalOutcome = outcome
+    if (existing.some((entry) => entry.runId === finalOutcome.runId && entry.requestedAt !== finalOutcome.requestedAt)) {
+      let suffix = 2
+      let candidateId = `${outcome.runId}-${suffix}`
+      while (existing.some((entry) => entry.runId === candidateId)) {
+        suffix++
+        candidateId = `${outcome.runId}-${suffix}`
+      }
+      finalOutcome = { ...outcome, runId: candidateId }
+    }
+    const kept = existing.filter((entry) => entry.runId !== finalOutcome.runId)
+    kept.push(finalOutcome)
     store.setItem(STORAGE_KEY, JSON.stringify(kept.slice(-MAX_STORED_RUNS)))
   } catch {
     // Session storage unavailable or full: history simply stays memory-only.
