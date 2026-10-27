@@ -18,7 +18,6 @@ export default function WorkspaceBar() {
   return (
     <nav className="wbar" aria-label="Discovery workspace">
       <div className="wbar__inner">
-        <span className="wbar__title">Discovery</span>
         <div className="wbar__tabs">
           {TABS.map((tab) => {
             const query = new URLSearchParams()

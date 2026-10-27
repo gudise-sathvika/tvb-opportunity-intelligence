@@ -18,8 +18,6 @@ import { persistRunOutcome } from '../live-source/persisted-runs'
 import { liveGrantsGovDiscoveryStore } from '../live-source/live-grantsgov-discovery'
 import { liveEuSediaDiscoveryStore } from '../live-source/live-eu-sedia-discovery'
 import { liveUsaSpendingDiscoveryStore } from '../live-source/live-funding-discovery'
-import { listDiscoveryRuns } from '../live-source/discovery-run-history'
-import { reviewFixtureStore } from '../automation/review-fixture'
 
 import { loadImportedTargetCompanies, subscribeImportedTargetCompanies } from '../target-companies/store'
 import { csvPreviewToTargetCompanies } from '../target-companies/profiles'
@@ -77,10 +75,6 @@ export default function Discovery() {
     ...liveDiscoveryStore.history(),
     ...discoveryFixtureStore.history(),
   ])
-
-  // Overview metrics from real state
-  const totalRuns = listDiscoveryRuns().length
-  const pendingReviews = reviewFixtureStore.items().filter((item) => item.reviewStatus === 'NEEDS_REVIEW').length
 
   function toggle(companyId: string) {
     setSelected((prev) => {
@@ -255,49 +249,6 @@ export default function Discovery() {
           Opportunity intelligence and discovery automation for your target portfolio companies.
         </p>
       </header>
-
-      {/* Executive Overview Cards */}
-      <div className="sn-overview-grid">
-        <div className="sn-stat-card">
-          <div className="sn-stat-card__header">
-            <span className="sn-stat-card__title">Total Companies</span>
-            <span className="sn-stat-card__icon">🏢</span>
-          </div>
-          <span className="sn-stat-card__value">189</span>
-          <span className="sn-stat-card__meta">
-            {importedCompanies.length > 0 ? `${importedCompanies.length} active imported profiles` : 'Protected company directory'}
-          </span>
-        </div>
-
-        <div className="sn-stat-card">
-          <div className="sn-stat-card__header">
-            <span className="sn-stat-card__title">Discovery Runs</span>
-            <span className="sn-stat-card__icon">🚀</span>
-          </div>
-          <span className="sn-stat-card__value">{totalRuns}</span>
-          <span className="sn-stat-card__meta">Recorded in this session</span>
-        </div>
-
-        <div className="sn-stat-card">
-          <div className="sn-stat-card__header">
-            <span className="sn-stat-card__title">Needing Review</span>
-            <span className="sn-stat-card__icon" style={{ color: pendingReviews > 0 ? 'var(--accent)' : 'inherit' }}>
-              ⚖️
-            </span>
-          </div>
-          <span className="sn-stat-card__value">{pendingReviews}</span>
-          <span className="sn-stat-card__meta">Candidates awaiting decision</span>
-        </div>
-
-        <div className="sn-stat-card">
-          <div className="sn-stat-card__header">
-            <span className="sn-stat-card__title">Integrated Sources</span>
-            <span className="sn-stat-card__icon">🌐</span>
-          </div>
-          <span className="sn-stat-card__value">4</span>
-          <span className="sn-stat-card__meta">Grants.gov · EU SEDIA · TED · USA</span>
-        </div>
-      </div>
 
       {/* Demo Mode Banner (only when ?demo=1) */}
       {source.demo ? (
