@@ -4,9 +4,12 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/__tvb/:path*",
+      "destination": "https://tvb-opportunity-intelligence-pd8k.onrender.com/__tvb/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
   ]
 }
-
