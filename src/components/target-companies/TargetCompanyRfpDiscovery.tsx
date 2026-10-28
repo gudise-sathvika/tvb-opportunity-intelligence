@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { TED_BRIDGE_SEARCH_PATH } from '../../live-source/ted-bridge/contract'
+import { resolveBridgeUrl } from '../../live-source/bridge-url'
 import type { TedBridgeSearchResponse } from '../../live-source/ted-bridge/contract'
 import { loadImportedTargetCompanies } from '../../target-companies/store'
 import { csvPreviewToTargetCompanies } from '../../target-companies/profiles'
@@ -29,7 +30,7 @@ export default function TargetCompanyRfpDiscovery() {
     const nextResults: TargetCompanyLiveDiscoveryResult[] = []
     for (const profile of profiles.filter((item) => selected.has(item.companyId))) {
       const requester = async (term: string): Promise<TedBridgeSearchResponse> => {
-        const response = await fetch(TED_BRIDGE_SEARCH_PATH, {
+        const response = await fetch(resolveBridgeUrl(TED_BRIDGE_SEARCH_PATH), {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
@@ -41,7 +42,17 @@ export default function TargetCompanyRfpDiscovery() {
             requestedAt: new Date().toISOString(),
           }),
         })
-        return (await response.json()) as TedBridgeSearchResponse
+        const rawText = await response.text()
+        try {
+          return JSON.parse(rawText) as TedBridgeSearchResponse
+        } catch {
+          return {
+            ok: false as const,
+            status: response.status || 502,
+            body: null,
+            errors: [{ code: 'invalid_response', message: `TED bridge returned HTTP ${response.status} with non-JSON response` }],
+          }
+        }
       }
       const next = await runTargetCompanyTedDiscovery(profile, requester)
       nextResults.push(next)

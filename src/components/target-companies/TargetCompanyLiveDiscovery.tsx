@@ -6,6 +6,7 @@ import { EU_SEDIA_BRIDGE_SEARCH_PATH } from '../../live-source/eu-sedia-bridge/c
 import type { EuSediaBridgeSearchResponse } from '../../live-source/eu-sedia-bridge/contract'
 import { TED_BRIDGE_SEARCH_PATH } from '../../live-source/ted-bridge/contract'
 import type { TedBridgeSearchResponse } from '../../live-source/ted-bridge/contract'
+import { resolveBridgeUrl } from '../../live-source/bridge-url'
 import { loadImportedTargetCompanies } from '../../target-companies/store'
 import { csvPreviewToTargetCompanies } from '../../target-companies/profiles'
 import { buildCompanyDiscoveryQueries } from '../../target-companies/discovery-queries'
@@ -338,7 +339,7 @@ export default function TargetCompanyLiveDiscovery() {
         if (cached) return cached
         const promise: Promise<GrantsGovBridgeSearchResponse> = (async (): Promise<GrantsGovBridgeSearchResponse> => {
           try {
-            const response = await fetch(GRANTS_GOV_BRIDGE_SEARCH_PATH, {
+            const response = await fetch(resolveBridgeUrl(GRANTS_GOV_BRIDGE_SEARCH_PATH), {
               method: 'POST',
               headers: { 'content-type': 'application/json' },
               body: JSON.stringify({
@@ -350,14 +351,26 @@ export default function TargetCompanyLiveDiscovery() {
                 requestedAt: new Date().toISOString(),
               }),
             })
-            const data = (await response.json()) as GrantsGovBridgeSearchResponse & { error?: { code?: string; message?: string } }
-            if (!data.ok) {
-              const errs = Array.isArray(data.errors)
-                ? data.errors
-                : data.error
-                  ? [{ code: data.error.code ?? 'bridge_error', message: data.error.message ?? 'Grants.gov bridge request failed' }]
-                  : [{ code: 'http_error', message: `HTTP ${response.status} from Grants.gov bridge` }]
-              return { ok: false as const, status: data.status ?? response.status, body: null, errors: errs }
+            const rawText = await response.text()
+            let data: (GrantsGovBridgeSearchResponse & { error?: { code?: string; message?: string } }) | null = null
+            try {
+              data = JSON.parse(rawText)
+            } catch {
+              return {
+                ok: false as const,
+                status: response.status || 502,
+                body: null,
+                errors: [{ code: 'invalid_response', message: `Grants.gov bridge returned HTTP ${response.status} with non-JSON response (check backend status)` }],
+              }
+            }
+            if (!data || !data.ok) {
+              const resObj = data as { errors?: readonly { code?: string; message?: string }[]; error?: { code?: string; message?: string } } | null
+              const errs = Array.isArray(resObj?.errors)
+                ? resObj.errors
+                : resObj?.error
+                  ? [{ code: resObj.error.code ?? 'bridge_error', message: resObj.error.message ?? 'Grants.gov bridge request failed' }]
+                  : [{ code: 'http_error', message: `HTTP ${data?.status ?? response.status} from Grants.gov bridge` }]
+              return { ok: false as const, status: data?.status ?? response.status, body: null, errors: errs }
             }
             return data
           } catch (error) {
@@ -379,7 +392,7 @@ export default function TargetCompanyLiveDiscovery() {
         if (cached) return cached
         const promise: Promise<EuSediaBridgeSearchResponse> = (async (): Promise<EuSediaBridgeSearchResponse> => {
           try {
-            const response = await fetch(EU_SEDIA_BRIDGE_SEARCH_PATH, {
+            const response = await fetch(resolveBridgeUrl(EU_SEDIA_BRIDGE_SEARCH_PATH), {
               method: 'POST',
               headers: { 'content-type': 'application/json' },
               body: JSON.stringify({
@@ -390,14 +403,26 @@ export default function TargetCompanyLiveDiscovery() {
                 requestedAt: new Date().toISOString(),
               }),
             })
-            const data = (await response.json()) as EuSediaBridgeSearchResponse & { error?: { code?: string; message?: string } }
-            if (!data.ok) {
-              const errs = Array.isArray(data.errors)
-                ? data.errors
-                : data.error
-                  ? [{ code: data.error.code ?? 'bridge_error', message: data.error.message ?? 'EU SEDIA bridge request failed' }]
-                  : [{ code: 'http_error', message: `HTTP ${response.status} from EU SEDIA bridge` }]
-              return { ok: false as const, status: data.status ?? response.status, body: null, errors: errs }
+            const rawText = await response.text()
+            let data: (EuSediaBridgeSearchResponse & { error?: { code?: string; message?: string } }) | null = null
+            try {
+              data = JSON.parse(rawText)
+            } catch {
+              return {
+                ok: false as const,
+                status: response.status || 502,
+                body: null,
+                errors: [{ code: 'invalid_response', message: `EU SEDIA bridge returned HTTP ${response.status} with non-JSON response (check backend status)` }],
+              }
+            }
+            if (!data || !data.ok) {
+              const resObj = data as { errors?: readonly { code?: string; message?: string }[]; error?: { code?: string; message?: string } } | null
+              const errs = Array.isArray(resObj?.errors)
+                ? resObj.errors
+                : resObj?.error
+                  ? [{ code: resObj.error.code ?? 'bridge_error', message: resObj.error.message ?? 'EU SEDIA bridge request failed' }]
+                  : [{ code: 'http_error', message: `HTTP ${data?.status ?? response.status} from EU SEDIA bridge` }]
+              return { ok: false as const, status: data?.status ?? response.status, body: null, errors: errs }
             }
             return data
           } catch (error) {
@@ -423,7 +448,7 @@ export default function TargetCompanyLiveDiscovery() {
               .toISOString()
               .slice(0, 10)
               .replace(/-/g, '')
-            const response = await fetch(TED_BRIDGE_SEARCH_PATH, {
+            const response = await fetch(resolveBridgeUrl(TED_BRIDGE_SEARCH_PATH), {
               method: 'POST',
               headers: { 'content-type': 'application/json' },
               body: JSON.stringify({
