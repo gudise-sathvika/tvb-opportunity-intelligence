@@ -28,10 +28,34 @@ const MAX_STORED_RUNS = 50
 
 function storage(): Storage | null {
   try {
-    if (typeof globalThis.sessionStorage === 'undefined') return null
-    return globalThis.sessionStorage
+    if (typeof window !== 'undefined') {
+      try {
+        if (window.localStorage) return window.localStorage
+      } catch {}
+      try {
+        if (window.sessionStorage) return window.sessionStorage
+      } catch {}
+    }
+    if (typeof globalThis.sessionStorage !== 'undefined' && globalThis.sessionStorage !== null) {
+      return globalThis.sessionStorage
+    }
+    if (typeof globalThis.localStorage !== 'undefined' && globalThis.localStorage !== null) {
+      return globalThis.localStorage
+    }
+    return null
   } catch {
     return null
+  }
+}
+
+function compactOutcomeForStorage(outcome: DiscoveryRunOutcome): DiscoveryRunOutcome {
+  return {
+    ...outcome,
+    reviewQueue: (outcome.reviewQueue ?? []).slice(0, 100),
+    companies: (outcome.companies ?? []).map((c) => ({
+      ...c,
+      candidates: (c.candidates ?? []).slice(0, 50),
+    })),
   }
 }
 
@@ -56,7 +80,7 @@ export function persistRunOutcome(outcome: DiscoveryRunOutcome): void {
     const raw = store.getItem(STORAGE_KEY)
     const parsed: unknown = raw === null ? [] : JSON.parse(raw)
     const existing = (Array.isArray(parsed) ? parsed : []).filter(isRunOutcome)
-    let finalOutcome = outcome
+    let finalOutcome = compactOutcomeForStorage(outcome)
     if (existing.some((entry) => entry.runId === finalOutcome.runId && entry.requestedAt !== finalOutcome.requestedAt)) {
       let suffix = 2
       let candidateId = `${outcome.runId}-${suffix}`
@@ -64,13 +88,28 @@ export function persistRunOutcome(outcome: DiscoveryRunOutcome): void {
         suffix++
         candidateId = `${outcome.runId}-${suffix}`
       }
-      finalOutcome = { ...outcome, runId: candidateId }
+      finalOutcome = { ...finalOutcome, runId: candidateId }
     }
     const kept = existing.filter((entry) => entry.runId !== finalOutcome.runId)
     kept.push(finalOutcome)
-    store.setItem(STORAGE_KEY, JSON.stringify(kept.slice(-MAX_STORED_RUNS)))
+
+    try {
+      store.setItem(STORAGE_KEY, JSON.stringify(kept.slice(-MAX_STORED_RUNS)))
+    } catch {
+      // If quota exceeded, preserve the latest 10 runs
+      try {
+        store.setItem(STORAGE_KEY, JSON.stringify(kept.slice(-10)))
+      } catch {}
+    }
+
+    // Also mirror to sessionStorage if localStorage was primary
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage && window.sessionStorage !== store) {
+        window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(kept.slice(-10)))
+      }
+    } catch {}
   } catch {
-    // Session storage unavailable or full: history simply stays memory-only.
+    // Storage unavailable or full
   }
 }
 
@@ -80,7 +119,17 @@ export function loadPersistedRuns(): readonly DiscoveryRunOutcome[] {
   if (store === null) return []
   try {
     const raw = store.getItem(STORAGE_KEY)
-    if (raw === null) return []
+    if (raw === null) {
+      // Try fallback to sessionStorage if primary was empty
+      if (typeof window !== 'undefined' && window.sessionStorage && window.sessionStorage !== store) {
+        const fallbackRaw = window.sessionStorage.getItem(STORAGE_KEY)
+        if (fallbackRaw !== null) {
+          const parsed = JSON.parse(fallbackRaw)
+          return Array.isArray(parsed) ? parsed.filter(isRunOutcome) : []
+        }
+      }
+      return []
+    }
     const parsed: unknown = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
     return parsed.filter(isRunOutcome)
