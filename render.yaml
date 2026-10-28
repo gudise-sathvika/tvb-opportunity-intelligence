@@ -13,4 +13,6 @@ services:
         value: "1"
       - key: TVB_ALLOWED_ORIGINS
         value: "*"
+      - key: TVB_MAX_CONCURRENT
+        value: "16"
 

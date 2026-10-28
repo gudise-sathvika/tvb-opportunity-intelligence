@@ -339,18 +339,26 @@ export default function TargetCompanyLiveDiscovery() {
         if (cached) return cached
         const promise: Promise<GrantsGovBridgeSearchResponse> = (async (): Promise<GrantsGovBridgeSearchResponse> => {
           try {
-            const response = await fetch(resolveBridgeUrl(GRANTS_GOV_BRIDGE_SEARCH_PATH), {
-              method: 'POST',
-              headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({
-                runId: currentRunId,
-                companyId: 'target-discovery',
-                keyword: term.trim(),
-                oppStatuses: 'posted',
-                limit: 100,
-                requestedAt: new Date().toISOString(),
-              }),
-            })
+            const executeSearch = () =>
+              fetch(resolveBridgeUrl(GRANTS_GOV_BRIDGE_SEARCH_PATH), {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({
+                  runId: currentRunId,
+                  companyId: 'target-discovery',
+                  keyword: term.trim(),
+                  oppStatuses: 'posted',
+                  limit: 100,
+                  requestedAt: new Date().toISOString(),
+                }),
+              })
+
+            let response = await executeSearch()
+            if (response.status === 503) {
+              // Retry once after server concurrency slot frees up
+              await new Promise((resolve) => setTimeout(resolve, 800))
+              response = await executeSearch()
+            }
             const rawText = await response.text()
             let data: (GrantsGovBridgeSearchResponse & { error?: { code?: string; message?: string } }) | null = null
             try {
@@ -504,10 +512,13 @@ export default function TargetCompanyLiveDiscovery() {
       }
 
       // Pre-warm unique searches:
-      // 1. Grants.gov queries run in parallel (US Federal Grants API comfortably handles concurrency)
-      await Promise.all(Array.from(uniqueGrantsTerms).map((term) => grantsRequester(term)))
-
       const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+      // 1. Grants.gov queries run sequentially with a slight pause to respect server concurrency bounds
+      for (const term of uniqueGrantsTerms) {
+        await grantsRequester(term)
+        await delay(150)
+      }
 
       // 2. TED Procurement queries run sequentially with backoff to avoid triggering the EU TED 429 rate limit
       for (const term of uniqueTedTerms) {
