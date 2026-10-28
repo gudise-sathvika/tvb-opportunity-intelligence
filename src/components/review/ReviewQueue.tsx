@@ -28,6 +28,7 @@ import {
 import type { ReviewItem } from '../../automation/review-queue'
 import { FTS_LIVE_POOL_COMPANY_ID } from '../../live-source/live-discovery'
 import { listAssociations } from '../../live-source/company-associations'
+import { restoreSuppliedReviewState } from '../../live-source/review-persistence'
 
 /** Phase 05 section split helper: canonical domain, never title text. */
 function sectionFor(entry: ReviewItem): ReviewSectionKey {
@@ -121,6 +122,7 @@ export default function ReviewQueue({
   // stay ephemeral.
   const [, forceRender] = useReducer((version: number) => version + 1, 0)
   useEffect(() => {
+    restoreSuppliedReviewState()
     const unsubscribeTick = reviewFixtureStore.subscribe(() => {
       forceRender()
     })

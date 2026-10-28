@@ -93,7 +93,7 @@ export function outcomeLabel(outcome: TargetRelevanceOutcome | null | undefined)
 export function extractDistinctCompanies(groups: readonly OpportunityAssessmentGroup[]): string[] {
   const companySet = new Set<string>()
   for (const group of groups) {
-    for (const assessment of group.assessments) {
+    for (const assessment of group.assessments ?? []) {
       const name = assessment.companyName.trim()
       if (name) companySet.add(name)
     }
@@ -140,8 +140,8 @@ export function buildMatrixRows(
     if (query) {
       const titleMatches = group.opportunityTitle.toLowerCase().includes(query)
       const sourceMatches = group.source.toLowerCase().includes(query)
-      const companyMatches = group.assessments.some((a) => a.companyName.toLowerCase().includes(query))
-      const reasonMatches = group.assessments.some((a) => a.reasons.some((r) => r.toLowerCase().includes(query)))
+      const companyMatches = (group.assessments ?? []).some((a) => a.companyName.toLowerCase().includes(query))
+      const reasonMatches = (group.assessments ?? []).some((a) => (a.reasons ?? []).some((r) => r.toLowerCase().includes(query)))
       if (!titleMatches && !sourceMatches && !companyMatches && !reasonMatches) {
         continue
       }
@@ -149,7 +149,7 @@ export function buildMatrixRows(
 
     // 4. Build map of assessments for this opportunity
     const assessmentByCompany = new Map<string, TargetRelevanceResult>()
-    for (const assessment of group.assessments) {
+    for (const assessment of group.assessments ?? []) {
       assessmentByCompany.set(assessment.companyName.toLowerCase(), assessment)
     }
 

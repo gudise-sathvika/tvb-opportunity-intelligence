@@ -285,7 +285,7 @@ export default function Logs() {
                   {log.summary}
                 </p>
 
-                {log.errors.length > 0 ? (
+                {(log.errors?.length ?? 0) > 0 ? (
                   <div
                     style={{
                       background: 'var(--error-bg)',
@@ -300,14 +300,14 @@ export default function Logs() {
                   >
                     <strong>Error details:</strong>
                     <ul style={{ margin: '4px 0 0', paddingLeft: '18px' }}>
-                      {log.errors.map((err, i) => (
+                      {(log.errors ?? []).map((err, i) => (
                         <li key={i}>{err}</li>
                       ))}
                     </ul>
                   </div>
                 ) : null}
 
-                {log.warnings.length > 0 ? (
+                {(log.warnings?.length ?? 0) > 0 ? (
                   <div
                     style={{
                       background: 'var(--warn-bg)',
@@ -321,7 +321,7 @@ export default function Logs() {
                   >
                     <strong>Warnings:</strong>
                     <ul style={{ margin: '4px 0 0', paddingLeft: '18px' }}>
-                      {log.warnings.map((w, i) => (
+                      {(log.warnings ?? []).map((w, i) => (
                         <li key={i}>{w}</li>
                       ))}
                     </ul>

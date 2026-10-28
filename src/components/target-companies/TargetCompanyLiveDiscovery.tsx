@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { GRANTS_GOV_BRIDGE_SEARCH_PATH } from '../../live-source/grantsgov-bridge/contract'
 import type { GrantsGovBridgeSearchResponse } from '../../live-source/grantsgov-bridge/contract'
@@ -8,6 +8,7 @@ import { TED_BRIDGE_SEARCH_PATH } from '../../live-source/ted-bridge/contract'
 import type { TedBridgeSearchResponse } from '../../live-source/ted-bridge/contract'
 import { loadImportedTargetCompanies } from '../../target-companies/store'
 import { csvPreviewToTargetCompanies } from '../../target-companies/profiles'
+import { buildCompanyDiscoveryQueries } from '../../target-companies/discovery-queries'
 import {
   groupTargetRecommendations,
   runTargetCompanyDiscovery,
@@ -16,7 +17,14 @@ import {
 import type { TargetCompanyLiveDiscoveryResult } from '../../target-companies/live-discovery'
 import { loadPersistedRuns, persistRunOutcome } from '../../live-source/persisted-runs'
 import type { DiscoveryCompanyResult, DiscoveryRunOutcome } from '../../automation/discovery-fixture'
+import { createReviewQueue } from '../../automation/review-queue'
+import { reviewFixtureStore } from '../../automation/review-fixture'
+import type { DiscoveryCandidate } from '../../automation/candidate'
+import type { DiscoveryDomain } from '../../automation/types'
+import { saveSuppliedReviewState } from '../../live-source/review-persistence'
+import { downloadLeadsCsv } from '../../target-companies/export-leads-csv'
 import MatchMatrix from './MatchMatrix'
+import LeadsDownloadMenu from './LeadsDownloadMenu'
 
 const TARGET_RESULTS_KEY = 'tvb.target-company-results.v1'
 
@@ -42,10 +50,144 @@ function saveCachedResults(results: TargetCompanyLiveDiscoveryResult[]): void {
   }
 }
 
+function syncRecommendationsToReviewQueue(
+  resultsList: readonly TargetCompanyLiveDiscoveryResult[],
+  runId: string,
+  runTime: string,
+): DiscoveryCandidate[] {
+  const candidatesNeedingReview: DiscoveryCandidate[] = []
+
+  for (const result of resultsList) {
+    const compId = result.profile.name || result.profile.companyId
+    for (const rec of result.recommendations ?? []) {
+      if (rec.outcome === 'not_relevant') continue
+
+      const domain: DiscoveryDomain = rec.opportunityType === 'procurement' ? 'procurement' : 'funding'
+      let sourceHost = 'unknown'
+      try {
+        sourceHost = new URL(rec.sourceUrl).hostname.toLowerCase()
+      } catch {}
+
+      const sourceId = sourceHost.includes('grants.gov')
+        ? 'SU-GRANTS-001'
+        : sourceHost.includes('ted.europa.eu')
+          ? 'SU-TED-001'
+          : sourceHost.includes('europa.eu')
+            ? 'SU-EU-SEDIA-001'
+            : 'SU-LIVE-001'
+      const sourceName = sourceHost.includes('grants.gov')
+        ? 'Grants.gov'
+        : sourceHost.includes('ted.europa.eu')
+          ? 'TED Procurement'
+          : sourceHost.includes('europa.eu')
+            ? 'EU SEDIA'
+            : sourceHost
+
+      const rawType = rec.opportunityType === 'procurement' ? 'RFP' : 'GRANT'
+      const candidateId = `${sourceId}:${rec.opportunityId}:${compId}`
+
+      candidatesNeedingReview.push({
+        candidateId,
+        discoveryRunId: runId,
+        companyId: compId,
+        discoveryProfileId: result.profile.companyId,
+        sourceId,
+        sourceRecordId: rec.opportunityId,
+        sourceUrl: rec.sourceUrl,
+        sourceTitle: rec.opportunityTitle,
+        sourceSummary: Array.isArray(rec.reasons) ? rec.reasons.join(' ') : null,
+        sourcePublicationDate: null,
+        sourceDeadline: rec.deadline ?? null,
+        sourceOrganization: null,
+        sourceCountry: null,
+        sourceRawType: rawType,
+        sourceStatus: rec.status ?? null,
+        domain,
+        candidateType: 'opportunity',
+        candidateStatus: 'REVIEW',
+        provenance: {
+          runId,
+          companyId: compId,
+          discoveryProfileId: result.profile.companyId,
+          sourceId,
+          sourceName,
+          sourceUrl: rec.sourceUrl,
+          sourceRecordId: rec.opportunityId,
+          adapterType: sourceId === 'SU-TED-001' ? 'ted' : sourceId === 'SU-EU-SEDIA-001' ? 'eu-sedia' : 'grantsgov',
+          domain,
+          accessState: 'AVAILABLE',
+          queryTerm: null,
+          requestedAt: runTime,
+          observedAt: runTime,
+          stageHistory: ['transform', 'normalize', 'classify'],
+        },
+        normalization: {
+          ruleVersion: '2026-10-01',
+          status: 'NORMALIZED',
+          changedFields: [],
+          warnings: [],
+          title: { original: rec.opportunityTitle, normalized: rec.opportunityTitle },
+          sourceUrl: { original: rec.sourceUrl, normalized: rec.sourceUrl },
+          canonicalUrl: rec.sourceUrl,
+          summary: {
+            original: Array.isArray(rec.reasons) ? rec.reasons.join(' ') : null,
+            normalized: Array.isArray(rec.reasons) ? rec.reasons.join(' ') : null,
+          },
+          publicationDate: { original: null, normalized: null },
+          deadline: { original: rec.deadline ?? null, normalized: rec.deadline ?? null },
+          organization: { original: null, normalized: null },
+          country: { original: null, normalized: null },
+          rawType: { original: rawType, normalized: rawType },
+          sourceStatus: { original: rec.status ?? null, normalized: rec.status ?? null },
+        },
+        classification: {
+          state: 'CLASSIFIED',
+          type: rawType,
+          certainty: 'HIGH',
+          evidence: {
+            domain,
+            sourceEvidence: { sourceId, adapterType: null, sourceRawType: rawType },
+            titleHints: [],
+            matchedRule: 'target-company-match',
+            ruleVersion: '2026-10-01',
+          },
+        },
+        duplicate: {
+          verdict: 'DISTINCT',
+          evidence: {
+            ruleVersion: '2026-10-01',
+            matchedOn: 'source identity',
+            tier: 1,
+            otherCandidateId: null,
+            titleKey: rec.opportunityTitle,
+            corroboratingSignals: [],
+          },
+        },
+      })
+    }
+  }
+
+  if (candidatesNeedingReview.length > 0) {
+    const queue = createReviewQueue(candidatesNeedingReview, { createdAt: runTime })
+    reviewFixtureStore.addReviewItems(queue)
+    saveSuppliedReviewState()
+  }
+
+  return candidatesNeedingReview
+}
+
 export default function TargetCompanyLiveDiscovery() {
   const imported = loadImportedTargetCompanies()
   const profiles = imported ? csvPreviewToTargetCompanies(imported) : []
   const [results, setResults] = useState<TargetCompanyLiveDiscoveryResult[]>(() => loadCachedResults())
+
+  useEffect(() => {
+    if (results.length > 0) {
+      const now = new Date().toISOString()
+      syncRecommendationsToReviewQueue(results, 'RUN-LIVE-RESTORED', now)
+    }
+  }, [results])
+
   const [running, setRunning] = useState(false)
   const [runError, setRunError] = useState<string | null>(null)
   const [discoveryScope, setDiscoveryScope] = useState<'grants' | 'rfps' | 'all'>('grants')
@@ -95,8 +237,8 @@ export default function TargetCompanyLiveDiscovery() {
   const sourceErrors = useMemo(
     () =>
       results.flatMap((result) =>
-        result.sourceResults.flatMap((source) =>
-          source.errors.map((message) => ({
+        (result.sourceResults ?? []).flatMap((source) =>
+          (source.errors ?? []).map((message) => ({
             source: source.source,
             message,
           })),
@@ -134,13 +276,13 @@ export default function TargetCompanyLiveDiscovery() {
           return a.opportunityTitle.localeCompare(b.opportunityTitle)
         }
         if (sortBy === 'deadline') {
-          const dateA = a.assessments[0]?.deadline ? new Date(a.assessments[0].deadline).getTime() : 0
-          const dateB = b.assessments[0]?.deadline ? new Date(b.assessments[0].deadline).getTime() : 0
+          const dateA = a.assessments?.[0]?.deadline ? new Date(a.assessments[0].deadline).getTime() : 0
+          const dateB = b.assessments?.[0]?.deadline ? new Date(b.assessments[0].deadline).getTime() : 0
           return dateA - dateB
         }
         // sort by max score
-        const maxA = Math.max(...a.assessments.map((item) => (typeof item.score === 'number' ? item.score : 0)), 0)
-        const maxB = Math.max(...b.assessments.map((item) => (typeof item.score === 'number' ? item.score : 0)), 0)
+        const maxA = Math.max(...(a.assessments ?? []).map((item) => (typeof item?.score === 'number' ? item.score : 0)), 0)
+        const maxB = Math.max(...(b.assessments ?? []).map((item) => (typeof item?.score === 'number' ? item.score : 0)), 0)
         return maxB - maxA
       })
   }, [opportunityGroups, search, typeFilter, outcomeFilter, companyFilter, sortBy])
@@ -166,57 +308,196 @@ export default function TargetCompanyLiveDiscovery() {
         currentRunId = `RUN-LIVE-${String(counter).padStart(4, '0')}`
       }
 
+      // Deduplicate query terms across all profiles so identical searches are only executed once
+      const uniqueGrantsTerms = new Set<string>()
+      const uniqueEuTerms = new Set<string>()
+      const uniqueTedTerms = new Set<string>()
+
+      for (const profile of profiles) {
+        const queries = buildCompanyDiscoveryQueries(profile)
+        const terms = [...new Set(queries.map((q) => q.term))]
+        for (const term of terms) {
+          const trimmed = term.trim()
+          if (discoveryScope === 'rfps' || discoveryScope === 'all') {
+            if (trimmed !== '') uniqueTedTerms.add(trimmed)
+          }
+          if (discoveryScope === 'grants' || discoveryScope === 'all') {
+            uniqueGrantsTerms.add(trimmed)
+            uniqueEuTerms.add(trimmed)
+          }
+        }
+      }
+
+      const grantsCache = new Map<string, Promise<GrantsGovBridgeSearchResponse>>()
+      const euCache = new Map<string, Promise<EuSediaBridgeSearchResponse>>()
+      const tedCache = new Map<string, Promise<TedBridgeSearchResponse>>()
+
+      const grantsRequester = (term: string): Promise<GrantsGovBridgeSearchResponse> => {
+        const key = term.trim().toLowerCase()
+        const cached = grantsCache.get(key)
+        if (cached) return cached
+        const promise: Promise<GrantsGovBridgeSearchResponse> = (async (): Promise<GrantsGovBridgeSearchResponse> => {
+          try {
+            const response = await fetch(GRANTS_GOV_BRIDGE_SEARCH_PATH, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                runId: currentRunId,
+                companyId: 'target-discovery',
+                keyword: term.trim(),
+                oppStatuses: 'posted',
+                limit: 100,
+                requestedAt: new Date().toISOString(),
+              }),
+            })
+            const data = (await response.json()) as GrantsGovBridgeSearchResponse & { error?: { code?: string; message?: string } }
+            if (!data.ok) {
+              const errs = Array.isArray(data.errors)
+                ? data.errors
+                : data.error
+                  ? [{ code: data.error.code ?? 'bridge_error', message: data.error.message ?? 'Grants.gov bridge request failed' }]
+                  : [{ code: 'http_error', message: `HTTP ${response.status} from Grants.gov bridge` }]
+              return { ok: false as const, status: data.status ?? response.status, body: null, errors: errs }
+            }
+            return data
+          } catch (error) {
+            return {
+              ok: false as const,
+              status: 500,
+              body: null,
+              errors: [{ code: 'network_error', message: error instanceof Error ? error.message : String(error) }],
+            }
+          }
+        })()
+        grantsCache.set(key, promise)
+        return promise
+      }
+
+      const euRequester = (term: string): Promise<EuSediaBridgeSearchResponse> => {
+        const key = term.trim().toLowerCase()
+        const cached = euCache.get(key)
+        if (cached) return cached
+        const promise: Promise<EuSediaBridgeSearchResponse> = (async (): Promise<EuSediaBridgeSearchResponse> => {
+          try {
+            const response = await fetch(EU_SEDIA_BRIDGE_SEARCH_PATH, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                runId: currentRunId,
+                companyId: 'target-discovery',
+                keyword: term.trim(),
+                limit: 100,
+                requestedAt: new Date().toISOString(),
+              }),
+            })
+            const data = (await response.json()) as EuSediaBridgeSearchResponse & { error?: { code?: string; message?: string } }
+            if (!data.ok) {
+              const errs = Array.isArray(data.errors)
+                ? data.errors
+                : data.error
+                  ? [{ code: data.error.code ?? 'bridge_error', message: data.error.message ?? 'EU SEDIA bridge request failed' }]
+                  : [{ code: 'http_error', message: `HTTP ${response.status} from EU SEDIA bridge` }]
+              return { ok: false as const, status: data.status ?? response.status, body: null, errors: errs }
+            }
+            return data
+          } catch (error) {
+            return {
+              ok: false as const,
+              status: 500,
+              body: null,
+              errors: [{ code: 'network_error', message: error instanceof Error ? error.message : String(error) }],
+            }
+          }
+        })()
+        euCache.set(key, promise)
+        return promise
+      }
+
+      const tedRequester = (term: string): Promise<TedBridgeSearchResponse> => {
+        const key = term.trim().toLowerCase()
+        const cached = tedCache.get(key)
+        if (cached) return cached
+        const promise: Promise<TedBridgeSearchResponse> = (async (): Promise<TedBridgeSearchResponse> => {
+          try {
+            const publishedSince = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000)
+              .toISOString()
+              .slice(0, 10)
+              .replace(/-/g, '')
+            const response = await fetch(TED_BRIDGE_SEARCH_PATH, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                runId: currentRunId,
+                companyId: 'target-discovery',
+                keyword: term.trim(),
+                publishedSince,
+                limit: 100,
+                requestedAt: new Date().toISOString(),
+              }),
+            })
+            const rawText = await response.text()
+            let data: (TedBridgeSearchResponse & { error?: { code?: string; message?: string } }) | null = null
+            try {
+              data = JSON.parse(rawText)
+            } catch {
+              return {
+                ok: false as const,
+                status: response.status || 502,
+                body: null,
+                errors: [{ code: 'invalid_response', message: `TED bridge returned HTTP ${response.status} with non-JSON response` }],
+              }
+            }
+            if (!data || !data.ok || (typeof data.status === 'number' && data.status >= 400)) {
+              const resObj = data as { errors?: readonly { code?: string; message?: string }[]; error?: { code?: string; message?: string } } | null
+              const errs = Array.isArray(resObj?.errors) && resObj.errors.length > 0
+                ? resObj.errors.map((e) => ({ code: e.code ?? 'bridge_error', message: e.message ?? 'TED bridge request failed' }))
+                : resObj?.error
+                  ? [{ code: resObj.error.code ?? 'bridge_error', message: resObj.error.message ?? 'TED bridge request failed' }]
+                  : [{ code: 'http_error', message: `HTTP ${data?.status ?? response.status} from TED bridge` }]
+              return { ok: false as const, status: data?.status ?? response.status, body: null, errors: errs }
+            }
+            if (typeof data.body === 'string' && data.body.trim().startsWith('<')) {
+              return {
+                ok: false as const,
+                status: data.status || 502,
+                body: null,
+                errors: [{ code: 'invalid_response', message: 'TED source returned HTML error page instead of JSON' }],
+              }
+            }
+            return data
+          } catch (error) {
+            return {
+              ok: false as const,
+              status: 500,
+              body: null,
+              errors: [{ code: 'network_error', message: error instanceof Error ? error.message : String(error) }],
+            }
+          }
+        })()
+        tedCache.set(key, promise)
+        return promise
+      }
+
+      // Pre-warm unique searches:
+      // 1. Grants.gov queries run in parallel (US Federal Grants API comfortably handles concurrency)
+      await Promise.all(Array.from(uniqueGrantsTerms).map((term) => grantsRequester(term)))
+
+      const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+      // 2. TED Procurement queries run sequentially with backoff to avoid triggering the EU TED 429 rate limit
+      for (const term of uniqueTedTerms) {
+        await tedRequester(term)
+        await delay(350)
+      }
+
+      // 3. EU SEDIA queries run sequentially to avoid gateway socket timeouts on ec.europa.eu
+      for (const term of uniqueEuTerms) {
+        await euRequester(term)
+        await delay(350)
+      }
+
       const nextResults: TargetCompanyLiveDiscoveryResult[] = []
       for (const profile of profiles) {
-        const grantsRequester = async (term: string): Promise<GrantsGovBridgeSearchResponse> => {
-          const response = await fetch(GRANTS_GOV_BRIDGE_SEARCH_PATH, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({
-              runId: currentRunId,
-              companyId: profile.companyId,
-              keyword: term,
-              oppStatuses: 'posted',
-              limit: 100,
-              requestedAt: new Date().toISOString(),
-            }),
-          })
-          return (await response.json()) as GrantsGovBridgeSearchResponse
-        }
-        const euRequester = async (term: string): Promise<EuSediaBridgeSearchResponse> => {
-          const response = await fetch(EU_SEDIA_BRIDGE_SEARCH_PATH, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({
-              runId: currentRunId,
-              companyId: profile.companyId,
-              keyword: term,
-              limit: 100,
-              requestedAt: new Date().toISOString(),
-            }),
-          })
-          return (await response.json()) as EuSediaBridgeSearchResponse
-        }
-        const tedRequester = async (term: string): Promise<TedBridgeSearchResponse> => {
-          const publishedSince = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000)
-            .toISOString()
-            .slice(0, 10)
-            .replace(/-/g, '')
-          const response = await fetch(TED_BRIDGE_SEARCH_PATH, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({
-              runId: currentRunId,
-              companyId: profile.companyId,
-              keyword: term,
-              publishedSince,
-              limit: 100,
-              requestedAt: new Date().toISOString(),
-            }),
-          })
-          return (await response.json()) as TedBridgeSearchResponse
-        }
-
         if (discoveryScope === 'rfps') {
           nextResults.push(await runTargetCompanyTedDiscovery(profile, tedRequester))
         } else if (discoveryScope === 'all') {
@@ -224,12 +505,12 @@ export default function TargetCompanyLiveDiscovery() {
           const tedResult = await runTargetCompanyTedDiscovery(profile, tedRequester)
           nextResults.push({
             profile,
-            queries: [...new Set([...grantsResult.queries, ...tedResult.queries])],
-            records: [...grantsResult.records, ...tedResult.records],
-            recommendations: [...grantsResult.recommendations, ...tedResult.recommendations],
-            errors: [...grantsResult.errors, ...tedResult.errors],
-            sourceResults: [...grantsResult.sourceResults, ...tedResult.sourceResults],
-            newRecordCount: grantsResult.newRecordCount + tedResult.newRecordCount,
+            queries: [...new Set([...(grantsResult.queries ?? []), ...(tedResult.queries ?? [])])],
+            records: [...(grantsResult.records ?? []), ...(tedResult.records ?? [])],
+            recommendations: [...(grantsResult.recommendations ?? []), ...(tedResult.recommendations ?? [])],
+            errors: [...(grantsResult.errors ?? []), ...(tedResult.errors ?? [])],
+            sourceResults: [...(grantsResult.sourceResults ?? []), ...(tedResult.sourceResults ?? [])],
+            newRecordCount: (grantsResult.newRecordCount ?? 0) + (tedResult.newRecordCount ?? 0),
           })
         } else {
           // 'grants' (default)
@@ -240,17 +521,24 @@ export default function TargetCompanyLiveDiscovery() {
       saveCachedResults(nextResults)
 
       // Persist run outcome to session history and logs
-      const allRecords = nextResults.flatMap((r) => r.records)
-      const allSourceResults = nextResults.flatMap((r) => r.sourceResults)
-      const allRecommendations = nextResults.flatMap((r) => r.recommendations)
-      const hasErrors = nextResults.some((r) => r.errors.length > 0 || r.sourceResults.some((s) => s.errors.length > 0))
+      const allRecords = nextResults.flatMap((r) => r.records ?? [])
+      const allSourceResults = nextResults.flatMap((r) => r.sourceResults ?? [])
+      const allRecommendations = nextResults.flatMap((r) => r.recommendations ?? [])
+      const hasErrors = nextResults.some(
+        (r) => (r.errors?.length ?? 0) > 0 || (r.sourceResults ?? []).some((s) => (s.errors?.length ?? 0) > 0),
+      )
+
+      // Build DiscoveryCandidates and ReviewItems for human review
+      const candidatesNeedingReview = syncRecommendationsToReviewQueue(nextResults, currentRunId, runTime)
 
       const companyResults: DiscoveryCompanyResult[] = nextResults.map((r) => {
-        const compRecs = r.records.length
-        const compErrors = r.errors.length
-        const compNeedsReview = r.recommendations.filter((rec) => rec.outcome !== 'not_relevant').length
+        const compRecs = (r.records ?? []).length
+        const compErrors = (r.errors ?? []).length
+        const compNeedsReview = (r.recommendations ?? []).filter((rec) => rec.outcome !== 'not_relevant').length
+        const compName = r.profile.name || r.profile.companyId
+        const srcResults = r.sourceResults ?? []
         return {
-          companyId: r.profile.name || r.profile.companyId,
+          companyId: compName,
           domain: discoveryScope === 'rfps' ? 'procurement' : 'funding',
           runId: currentRunId,
           requestedAt: runTime,
@@ -258,8 +546,8 @@ export default function TargetCompanyLiveDiscovery() {
           scenario: 'live',
           outcome: compErrors > 0 ? (compRecs > 0 ? 'PARTIAL' : 'FAILED') : compRecs === 0 ? 'NO_RESULTS' : 'SUCCESS',
           counts: {
-            totalSources: r.sourceResults.length,
-            candidatesReceived: r.sourceResults.reduce((sum, s) => sum + s.recordCount, 0),
+            totalSources: srcResults.length,
+            candidatesReceived: srcResults.reduce((sum, s) => sum + (s.recordCount ?? 0), 0),
             candidatesCreated: compRecs,
             candidatesRequiringReview: compNeedsReview,
             duplicates: 0,
@@ -267,24 +555,24 @@ export default function TargetCompanyLiveDiscovery() {
             failedSources: compErrors > 0 ? 1 : 0,
           },
           needsReview: compNeedsReview,
-          sourceResults: r.sourceResults.map((s) => ({
+          sourceResults: srcResults.map((s) => ({
             sourceId: s.source === 'grantsgov' ? 'SU-GRANTS-001' : s.source === 'eu-sedia' ? 'SU-EU-SEDIA-001' : 'SU-TED-001',
             sourceName: s.source === 'grantsgov' ? 'Grants.gov' : s.source === 'eu-sedia' ? 'EU SEDIA' : 'TED Procurement',
             adapterType: s.source,
             domain: s.source === 'ted' ? 'procurement' : 'funding',
             accessState: 'AVAILABLE' as const,
-            outcome: s.errors.length > 0 ? (s.recordCount > 0 ? 'PARTIAL' : 'FAILED') : s.recordCount === 0 ? 'NO_RESULTS' : 'SUCCESS',
+            outcome: (s.errors?.length ?? 0) > 0 ? ((s.recordCount ?? 0) > 0 ? 'PARTIAL' : 'FAILED') : (s.recordCount ?? 0) === 0 ? 'NO_RESULTS' : 'SUCCESS',
             requestedAt: runTime,
             observedAt: runTime,
-            candidatesReceived: s.recordCount,
-            candidatesCreated: s.recordCount,
+            candidatesReceived: s.recordCount ?? 0,
+            candidatesCreated: s.recordCount ?? 0,
             candidatesRequiringReview: compNeedsReview,
             duplicates: 0,
             candidateIds: [],
-            errors: [...s.errors],
+            errors: [...(s.errors ?? [])],
             warnings: [],
           })),
-          candidates: [],
+          candidates: candidatesNeedingReview.filter((c) => c.companyId === compName),
         }
       })
 
@@ -298,16 +586,16 @@ export default function TargetCompanyLiveDiscovery() {
         companies: companyResults,
         counts: {
           totalSources: allSourceResults.length,
-          candidatesReceived: allSourceResults.reduce((sum, s) => sum + s.recordCount, 0),
+          candidatesReceived: allSourceResults.reduce((sum, s) => sum + (s.recordCount ?? 0), 0),
           candidatesCreated: allRecords.length,
           candidatesRequiringReview: allRecommendations.filter((rec) => rec.outcome !== 'not_relevant').length,
           duplicates: 0,
           blockedSources: 0,
-          failedSources: nextResults.filter((r) => r.errors.length > 0).length,
+          failedSources: nextResults.filter((r) => (r.errors?.length ?? 0) > 0).length,
         },
         needsReview: allRecommendations.filter((rec) => rec.outcome !== 'not_relevant').length,
         outcome: hasErrors ? (allRecords.length > 0 ? 'PARTIAL' : 'FAILED') : allRecords.length === 0 ? 'NO_RESULTS' : 'SUCCESS',
-        reviewQueue: [],
+        reviewQueue: reviewFixtureStore.suppliedItems(),
         sector: 'all',
         keyword: search.trim(),
         location: 'all',
@@ -364,7 +652,7 @@ export default function TargetCompanyLiveDiscovery() {
           Ready to Discover Opportunities
         </div>
         <p style={{ fontSize: '13.5px', color: 'var(--text-muted)', margin: '0 auto 16px', maxWidth: '540px', lineHeight: 1.5 }}>
-          Upload a target company CSV above (5–50 companies) to unlock automated multi-source discovery across Grants.gov, EU SEDIA, and TED Procurement tenders with explainable suitability scoring.
+          Upload a target company CSV above (1–50 companies) to unlock automated multi-source discovery across Grants.gov, EU SEDIA, and TED Procurement tenders with explainable suitability scoring.
         </p>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: 'var(--text-muted)', background: 'var(--surface-2)', padding: '6px 16px', borderRadius: '999px', border: '1px solid var(--border)' }}>
           <span>💡 Tip:</span>
@@ -424,6 +712,17 @@ export default function TargetCompanyLiveDiscovery() {
               <option value="all">All Opportunities (Grants + RFPs Combined)</option>
             </select>
           </label>
+
+          {results.length > 0 && leads > 0 ? (
+            <LeadsDownloadMenu
+              results={results}
+              companyName={profiles[0]?.name}
+              totalLeads={leads}
+              disabled={running}
+              variant="primary"
+              idPrefix="action-bar"
+            />
+          ) : null}
 
           {running ? <span role="status" style={{ fontSize: '13px', color: 'var(--accent)' }}>Searching live sources &amp; assessing fit...</span> : null}
         </div>
@@ -491,7 +790,12 @@ export default function TargetCompanyLiveDiscovery() {
               <span className="sn-stat-card__meta">Individual company-opportunity evaluations</span>
             </div>
 
-            <div className="sn-stat-card">
+            <Link
+              to="/discovery?view=human-review"
+              className="sn-stat-card"
+              style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+              title="Click to view all candidates awaiting review"
+            >
               <div className="sn-stat-card__header">
                 <span className="sn-stat-card__title">Awaiting Review</span>
                 <span className="sn-stat-card__icon" style={{ color: 'var(--accent)' }}>
@@ -499,8 +803,8 @@ export default function TargetCompanyLiveDiscovery() {
                 </span>
               </div>
               <span className="sn-stat-card__value">{needsReviewCount}</span>
-              <span className="sn-stat-card__meta">Candidates needing human evaluation</span>
-            </div>
+              <span className="sn-stat-card__meta">Candidates needing human evaluation &rarr;</span>
+            </Link>
 
             <div className="sn-stat-card">
               <div className="sn-stat-card__header">
@@ -511,6 +815,36 @@ export default function TargetCompanyLiveDiscovery() {
               </div>
               <span className="sn-stat-card__value">{closingSoonCount}</span>
               <span className="sn-stat-card__meta">Verified deadline in &le; 30 days</span>
+            </div>
+
+            <div
+              className="sn-stat-card"
+              style={{
+                cursor: leads > 0 ? 'pointer' : 'default',
+                borderColor: leads > 0 ? 'rgba(16, 185, 129, 0.4)' : undefined,
+                background: leads > 0 ? 'linear-gradient(180deg, var(--surface) 0%, rgba(16, 185, 129, 0.05) 100%)' : undefined,
+              }}
+              onClick={() => {
+                if (leads > 10) {
+                  document.getElementById('action-bar-download-leads-btn')?.click()
+                } else if (leads > 0) {
+                  downloadLeadsCsv(results, profiles[0]?.name)
+                }
+              }}
+              title={leads > 10 ? 'Click to view batch download options' : leads > 0 ? 'Click to download qualified leads CSV' : undefined}
+            >
+              <div className="sn-stat-card__header">
+                <span className="sn-stat-card__title">Potential Leads</span>
+                <span className="sn-stat-card__icon" style={{ color: 'var(--success, #10b981)' }}>
+                  🎯
+                </span>
+              </div>
+              <span className="sn-stat-card__value" style={{ color: leads > 0 ? 'var(--success, #10b981)' : undefined }}>
+                {leads}
+              </span>
+              <span className="sn-stat-card__meta">
+                {leads > 0 ? '📥 Click to export leads CSV' : 'Qualified by fit score'}
+              </span>
             </div>
           </div>
 
@@ -670,6 +1004,16 @@ export default function TargetCompanyLiveDiscovery() {
               <button type="button" className="btn btn--sm btn--outline" onClick={collapseAll}>
                 Collapse All
               </button>
+              {leads > 0 ? (
+                <LeadsDownloadMenu
+                  results={results}
+                  companyName={profiles[0]?.name}
+                  totalLeads={leads}
+                  disabled={running}
+                  variant="toolbar"
+                  idPrefix="toolbar"
+                />
+              ) : null}
               {(search || typeFilter !== 'all' || outcomeFilter !== 'all' || companyFilter !== 'all') ? (
                 <button type="button" className="btn btn--sm btn--outline" onClick={clearFilters}>
                   Clear Filters
@@ -690,7 +1034,7 @@ export default function TargetCompanyLiveDiscovery() {
                 const open = expandedKeys.has(group.key)
                 const firstAssessment = group.assessments[0]
                 const maxScore = Math.max(
-                  ...group.assessments.map((a) => (typeof a.score === 'number' ? a.score : 0)),
+                  ...(group.assessments ?? []).map((a) => (typeof a?.score === 'number' ? a.score : 0)),
                   0,
                 )
                 const scoreDisplay = maxScore > 0 ? `${maxScore <= 1 ? Math.round(maxScore * 100) : Math.round(maxScore)}%` : null
@@ -769,7 +1113,7 @@ export default function TargetCompanyLiveDiscovery() {
                           They represent system fit criteria, not guaranteed probabilities of award.
                         </p>
                         <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                          {group.assessments.map((assessment, index) => {
+                          {(group.assessments ?? []).map((assessment, index) => {
                             const scoreVal =
                               assessment.score != null
                                 ? assessment.score <= 1
@@ -797,7 +1141,7 @@ export default function TargetCompanyLiveDiscovery() {
                                 </div>
 
                                 <div className="sn-assessment-reasons">
-                                  <strong>Evaluation rationale:</strong> {assessment.reasons.join(' ')}
+                                  <strong>Evaluation rationale:</strong> {Array.isArray(assessment.reasons) ? assessment.reasons.join(' ') : ''}
                                 </div>
                               </li>
                             )

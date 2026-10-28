@@ -756,55 +756,57 @@ export default function MatchMatrix({
                   Evaluation Rationale &amp; Evidence
                 </h4>
                 <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '13.5px', lineHeight: 1.5 }}>
-                  {activeAssessment.assessment.reasons.map((r, i) => (
+                  {(activeAssessment.assessment.reasons ?? []).map((r, i) => (
                     <li key={i}>{r}</li>
                   ))}
                 </ul>
               </div>
 
               {/* Factors Breakdown */}
-              <div style={{ marginBottom: '16px' }}>
-                <h4 style={{ fontSize: '14px', fontWeight: 600, margin: '0 0 8px' }}>
-                  Alignment Factor Breakdown
-                </h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '8px' }}>
-                  {Object.entries(activeAssessment.assessment.factors).map(([factorName, factor]) => {
-                    const label = factorName
-                      .replace(/([A-Z])/g, ' $1')
-                      .replace(/^./, (s) => s.toUpperCase())
-                    return (
-                      <div
-                        key={factorName}
-                        style={{
-                          border: '1px solid var(--border)',
-                          borderRadius: 'var(--radius)',
-                          padding: '10px',
-                          background: 'var(--surface)',
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                          <span style={{ fontWeight: 600, fontSize: '12.5px' }}>{label}</span>
-                          <span className="sn-tag sn-tag--xs">
-                            {factor.score !== null ? `${Math.round(factor.score <= 1 ? factor.score * 100 : factor.score)}%` : '—'}
-                          </span>
+              {activeAssessment.assessment.factors ? (
+                <div style={{ marginBottom: '16px' }}>
+                  <h4 style={{ fontSize: '14px', fontWeight: 600, margin: '0 0 8px' }}>
+                    Alignment Factor Breakdown
+                  </h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '8px' }}>
+                    {Object.entries(activeAssessment.assessment.factors).map(([factorName, factor]) => {
+                      const label = factorName
+                        .replace(/([A-Z])/g, ' $1')
+                        .replace(/^./, (s) => s.toUpperCase())
+                      return (
+                        <div
+                          key={factorName}
+                          style={{
+                            border: '1px solid var(--border)',
+                            borderRadius: 'var(--radius)',
+                            padding: '10px',
+                            background: 'var(--surface)',
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                            <span style={{ fontWeight: 600, fontSize: '12.5px' }}>{label}</span>
+                            <span className="sn-tag sn-tag--xs">
+                              {factor.score !== null ? `${Math.round(factor.score <= 1 ? factor.score * 100 : factor.score)}%` : '—'}
+                            </span>
+                          </div>
+                          <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)' }}>
+                            {factor.reason || (Array.isArray(factor.evidence) && factor.evidence.length > 0 ? factor.evidence.join(', ') : 'No factor evidence')}
+                          </p>
                         </div>
-                        <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)' }}>
-                          {factor.reason || (factor.evidence.length > 0 ? factor.evidence.join(', ') : 'No factor evidence')}
-                        </p>
-                      </div>
-                    )
-                  })}
+                      )
+                    })}
+                  </div>
                 </div>
-              </div>
+              ) : null}
 
               {/* Matched / Missing / Mismatched Tags */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
-                {activeAssessment.assessment.matchedFields.length > 0 ? (
+                {(activeAssessment.assessment.matchedFields?.length ?? 0) > 0 ? (
                   <div>
                     <span style={{ fontSize: '12px', fontWeight: 600, marginRight: '8px' }}>
                       Matched Fields:
                     </span>
-                    {activeAssessment.assessment.matchedFields.map((f) => (
+                    {(activeAssessment.assessment.matchedFields ?? []).map((f) => (
                       <span key={f} className="sn-tag sn-tag--success" style={{ marginRight: '4px' }}>
                         ✓ {f}
                       </span>
@@ -812,12 +814,12 @@ export default function MatchMatrix({
                   </div>
                 ) : null}
 
-                {activeAssessment.assessment.missingFields.length > 0 ? (
+                {(activeAssessment.assessment.missingFields?.length ?? 0) > 0 ? (
                   <div>
                     <span style={{ fontSize: '12px', fontWeight: 600, marginRight: '8px' }}>
                       Missing Context:
                     </span>
-                    {activeAssessment.assessment.missingFields.map((f) => (
+                    {(activeAssessment.assessment.missingFields ?? []).map((f) => (
                       <span key={f} className="sn-tag" style={{ marginRight: '4px' }}>
                         ? {f}
                       </span>
@@ -825,12 +827,12 @@ export default function MatchMatrix({
                   </div>
                 ) : null}
 
-                {activeAssessment.assessment.mismatchedFields.length > 0 ? (
+                {(activeAssessment.assessment.mismatchedFields?.length ?? 0) > 0 ? (
                   <div>
                     <span style={{ fontSize: '12px', fontWeight: 600, marginRight: '8px' }}>
                       Mismatches:
                     </span>
-                    {activeAssessment.assessment.mismatchedFields.map((f) => (
+                    {(activeAssessment.assessment.mismatchedFields ?? []).map((f) => (
                       <span key={f} className="sn-tag sn-tag--muted" style={{ marginRight: '4px' }}>
                         ✕ {f}
                       </span>
@@ -908,10 +910,10 @@ export default function MatchMatrix({
 
             <div className="sn-modal-body">
               <h4 style={{ fontSize: '14px', fontWeight: 600, margin: '0 0 10px' }}>
-                Evaluated Target Companies ({activeOpportunity.rawGroup.assessments.length})
+                Evaluated Target Companies ({activeOpportunity.rawGroup.assessments?.length ?? 0})
               </h4>
               <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                {activeOpportunity.rawGroup.assessments.map((a, i) => {
+                {(activeOpportunity.rawGroup.assessments ?? []).map((a, i) => {
                   const pct = a.score !== null ? `${a.score <= 1 ? Math.round(a.score * 100) : Math.round(a.score)}%` : '—'
                   const isTop = activeOpportunity.topCompanies.includes(a.companyName)
                   return (

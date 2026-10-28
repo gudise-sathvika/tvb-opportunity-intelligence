@@ -83,9 +83,9 @@ function RunRow({
               <div style={{ marginTop: '8px' }}>
                 <strong>Source Results:</strong>
                 <ul style={{ margin: '4px 0 0', paddingLeft: '18px' }}>
-                  {outcome.companies.flatMap((c) => c.sourceResults).map((s, i) => (
+                  {(outcome.companies ?? []).flatMap((c) => c.sourceResults ?? []).map((s, i) => (
                     <li key={i}>
-                      {s.sourceName || s.sourceId}: {s.outcome} ({s.candidatesReceived} records retrieved, {s.errors.length} errors)
+                      {s.sourceName || s.sourceId}: {s.outcome} ({s.candidatesReceived} records retrieved, {s.errors?.length ?? 0} errors)
                     </li>
                   ))}
                 </ul>

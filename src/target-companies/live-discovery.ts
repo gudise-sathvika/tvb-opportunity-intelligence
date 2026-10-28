@@ -20,6 +20,17 @@ import type { GrantsGovBridgeSearchResponse } from '../live-source/grantsgov-bri
 import type { EuSediaBridgeSearchResponse } from '../live-source/eu-sedia-bridge/contract'
 import type { TedBridgeSearchResponse } from '../live-source/ted-bridge/contract'
 
+function extractResponseErrors(response: unknown, fallback: string): string[] {
+  const res = response as { errors?: Array<{ message?: string }>; error?: { message?: string } } | null | undefined
+  if (Array.isArray(res?.errors) && res.errors.length > 0) {
+    return res.errors.map((e) => e?.message ?? fallback)
+  }
+  if (res?.error?.message) {
+    return [res.error.message]
+  }
+  return [fallback]
+}
+
 export interface TargetCompanyLiveDiscoveryRecord {
   readonly source: 'grantsgov' | 'eu-sedia' | 'ted'
   readonly linkValidation?: 'source-provided' | 'constructed-unverified' | 'confirmed-unavailable' | null
@@ -97,8 +108,12 @@ export async function runTargetCompanyGrantsGovDiscovery(
       errors.push(`Grants.gov request failed: ${error instanceof Error ? error.message : String(error)}`)
       continue
     }
-    if (!response.ok) {
-      errors.push(...response.errors.map((error) => error.message))
+    if (!response.ok || (typeof response.status === 'number' && response.status >= 400)) {
+      errors.push(...extractResponseErrors(response, `Grants.gov bridge request failed (status ${response.status})`))
+      continue
+    }
+    if (!response.body || (typeof response.body === 'string' && response.body.trim().startsWith('<'))) {
+      errors.push(`Grants.gov source returned an HTML response instead of JSON (status ${response.status})`)
       continue
     }
     const parsed = parseGrantsGovBody(response.body, {
@@ -191,8 +206,12 @@ export async function runTargetCompanyEuSediaDiscovery(
       errors.push(`EU Funding & Tenders request failed: ${error instanceof Error ? error.message : String(error)}`)
       continue
     }
-    if (!response.ok) {
-      errors.push(...response.errors.map((error) => error.message))
+    if (!response.ok || (typeof response.status === 'number' && response.status >= 400)) {
+      errors.push(...extractResponseErrors(response, `EU Funding & Tenders bridge request failed (status ${response.status})`))
+      continue
+    }
+    if (!response.body || (typeof response.body === 'string' && response.body.trim().startsWith('<'))) {
+      errors.push(`EU Funding & Tenders source returned an HTML response instead of JSON (status ${response.status})`)
       continue
     }
     const parsed = parseEuSediaBody(response.body, {
@@ -279,8 +298,12 @@ export async function runTargetCompanyTedDiscovery(
   for (const term of uniqueTerms) {
     if (term === '') continue
     const response = await requester(term)
-    if (!response.ok) {
-      errors.push(...response.errors.map((error) => error.message))
+    if (!response.ok || (typeof response.status === 'number' && response.status >= 400)) {
+      errors.push(...extractResponseErrors(response, `TED bridge request failed (status ${response.status})`))
+      continue
+    }
+    if (!response.body || (typeof response.body === 'string' && response.body.trim().startsWith('<'))) {
+      errors.push(`TED source returned an HTML response instead of JSON (status ${response.status})`)
       continue
     }
     const parsed = parseTedSearchBody(response.body, {

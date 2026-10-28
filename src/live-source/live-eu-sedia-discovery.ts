@@ -48,6 +48,7 @@ import type { EuSediaTransport } from '../automation/eu-sedia-adapter'
 import { dedupeHandoffCandidates } from './live-discovery'
 import { EU_SEDIA_BRIDGE_SEARCH_PATH } from './eu-sedia-bridge/contract'
 import type { EuSediaBridgeSearchRequest, EuSediaBridgeSearchResponse } from './eu-sedia-bridge/contract'
+import { resolveBridgeUrl } from './bridge-url'
 
 export const EU_SEDIA_LIVE_RUN_ID_PREFIX = 'RUN-EU'
 export const EU_SEDIA_LIVE_PROFILE_ID = 'DP-LIVE-004'
@@ -84,7 +85,7 @@ export type EuSediaBridgeClient = (request: EuSediaBridgeSearchRequest) => Promi
 
 export function defaultEuSediaBridgeClient(): EuSediaBridgeClient {
   return async (request) => {
-    const response = await globalThis.fetch(EU_SEDIA_BRIDGE_SEARCH_PATH, {
+    const response = await globalThis.fetch(resolveBridgeUrl(EU_SEDIA_BRIDGE_SEARCH_PATH), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(request),
@@ -188,7 +189,11 @@ export function createLiveEuSediaDiscovery(options: {
   function transportFor(response: EuSediaBridgeSearchResponse): EuSediaTransport {
     return () => {
       if (!response.ok) {
-        throw new Error(response.errors.map((error) => error.message).join('; '))
+        const message =
+          Array.isArray(response.errors) && response.errors.length > 0
+            ? response.errors.map((error) => error.message).join('; ')
+            : (response as { error?: { message?: string } }).error?.message ?? 'live EU SEDIA search failed'
+        throw new Error(message)
       }
       return { status: response.status, body: response.body }
     }

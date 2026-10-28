@@ -516,7 +516,7 @@ export default function DiscoveryResults({ outcome }: { outcome: DiscoveryRunOut
                 </summary>
                 <div className="dg-result__body">
                   <ul className="dg-source-list">
-                    {company.sourceResults.map((result) => (
+                    {(company.sourceResults ?? []).map((result) => (
                       <li key={result.sourceId} className="dg-source">
                         <code className="idbadge">{result.sourceId}</code>
                         <span>{result.sourceName ?? 'Unknown source'}</span>
@@ -525,8 +525,8 @@ export default function DiscoveryResults({ outcome }: { outcome: DiscoveryRunOut
                           {OUTCOME_LABEL[result.outcome]}
                         </span>
                         <span className="dg-source__meta">
-                          candidates {result.candidatesCreated} · errors {result.errors.length} · warnings{' '}
-                          {result.warnings.length}
+                          candidates {result.candidatesCreated} · errors {result.errors?.length ?? 0} · warnings{' '}
+                          {result.warnings?.length ?? 0}
                         </span>
                       </li>
                     ))}

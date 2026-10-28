@@ -32,7 +32,7 @@ export interface FetchTransportOptions {
 }
 
 export function createFetchTransport(options: FetchTransportOptions = {}): FetchTransport {
-  const timeoutMs = options.timeoutMs ?? 20_000
+  const timeoutMs = options.timeoutMs ?? 45_000
   return (url, init) => {
     const response = globalThis.fetch(url, {
       method: init.method,

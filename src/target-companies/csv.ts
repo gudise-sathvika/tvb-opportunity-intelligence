@@ -5,7 +5,7 @@
  * validated rows are converted to company profiles by the target-company layer.
  */
 
-export const TARGET_COMPANY_ROW_MIN = 5
+export const TARGET_COMPANY_ROW_MIN = 1
 export const TARGET_COMPANY_ROW_MAX = 50
 
 export interface CsvPreview {

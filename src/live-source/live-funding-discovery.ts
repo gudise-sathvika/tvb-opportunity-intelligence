@@ -38,6 +38,7 @@ import type { UsaSpendingTransport } from '../automation/usaspending-adapter'
 import { dedupeHandoffCandidates } from './live-discovery'
 import { USA_BRIDGE_SEARCH_PATH } from './usaspending-bridge/contract'
 import type { UsaSpendingBridgeSearchRequest, UsaSpendingBridgeSearchResponse } from './usaspending-bridge/contract'
+import { resolveBridgeUrl } from './bridge-url'
 
 export const USA_LIVE_RUN_ID_PREFIX = 'RUN-F'
 export const USA_LIVE_PROFILE_ID = 'DP-LIVE-002'
@@ -76,7 +77,7 @@ export type UsaSpendingBridgeClient = (request: UsaSpendingBridgeSearchRequest) 
 
 export function defaultUsaSpendingBridgeClient(): UsaSpendingBridgeClient {
   return async (request) => {
-    const response = await globalThis.fetch(USA_BRIDGE_SEARCH_PATH, {
+    const response = await globalThis.fetch(resolveBridgeUrl(USA_BRIDGE_SEARCH_PATH), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(request),
@@ -161,7 +162,11 @@ export function createLiveUsaSpendingDiscovery(options: {
   function transportFor(response: UsaSpendingBridgeSearchResponse): UsaSpendingTransport {
     return () => {
       if (!response.ok) {
-        throw new Error(response.errors.map((error) => error.message).join('; '))
+        const message =
+          Array.isArray(response.errors) && response.errors.length > 0
+            ? response.errors.map((error) => error.message).join('; ')
+            : (response as { error?: { message?: string } }).error?.message ?? 'live USA Spending search failed'
+        throw new Error(message)
       }
       return { status: response.status, body: response.body }
     }

@@ -75,17 +75,19 @@ test('duplicate identifier column values are reported', () => {
   assert.ok(result.errors.some((e) => /Duplicate value "acme"/i.test(e)))
 })
 
-test('row count below 5 is reported', () => {
-  const input = csv(['H1,H2', 'a,b', 'c,d', 'e,f'])
+test('single-company CSV with 1 entry is accepted as valid', () => {
+  const input = csv(['Company,Country,Stage', 'Acme Inc,US,Growth'])
   const result = parseTargetCompanyCsv(input)
-  assert.ok(result.errors.some((e) => /Expected 5–50/i.test(e)))
+  assert.equal(result.rowCount, 1)
+  assert.equal(result.errors.length, 0)
+  assert.equal(result.rows[0][0], 'Acme Inc')
 })
 
 test('row count above 50 is reported', () => {
   const lines = ['H1,H2']
   for (let i = 0; i < 51; i++) lines.push(`r${i},v${i}`)
   const result = parseTargetCompanyCsv(lines.join('\n'))
-  assert.ok(result.errors.some((e) => /Expected 5–50/i.test(e)))
+  assert.ok(result.errors.some((e) => /Expected 1–50/i.test(e)))
 })
 
 test('header-only file is reported', () => {

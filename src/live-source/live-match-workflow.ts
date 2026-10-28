@@ -54,6 +54,7 @@ import type { SecBridgeEnrichRequest, SecBridgeEnrichResponse } from './sec-brid
 import { applyEnrichment, findSecTickerCandidate, mapSecSubmissions } from '../automation/company-enrichment'
 import type { CompanyEnrichment } from '../automation/company-enrichment'
 import { resolveConfirmedIdentities } from '../automation/company-identity'
+import { resolveBridgeUrl } from './bridge-url'
 
 export const LIVE_MATCH_RUN_ID = 'RUN-LIVE-MATCH'
 export const LIVE_MATCH_POOL_COMPANY_ID = 'RUN'
@@ -74,7 +75,7 @@ export interface LiveMatchClients {
 
 function postJson<Req, Res>(path: string): LiveMatchBridgeClient<Req, Res> {
   return async (request: Req): Promise<Res> => {
-    const response = await globalThis.fetch(path, {
+    const response = await globalThis.fetch(resolveBridgeUrl(path), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(request),
@@ -157,10 +158,20 @@ function nowIso(): string {
   return new Date().toISOString()
 }
 
+function formatBridgeErrors(
+  response: { errors?: readonly { message: string }[]; error?: { message?: string } },
+  fallback: string,
+): string {
+  if (Array.isArray(response.errors) && response.errors.length > 0) {
+    return response.errors.map((e) => e.message).join('; ')
+  }
+  return response.error?.message ?? fallback
+}
+
 function replayTransport(response: GrantsGovBridgeSearchResponse | FtsBridgeSearchResponse) {
   return () => {
     if (!response.ok) {
-      throw new Error(response.errors.map((error) => error.message).join('; '))
+      throw new Error(formatBridgeErrors(response as { errors?: readonly { message: string }[]; error?: { message?: string } }, 'bridge request failed'))
     }
     return { status: response.status, body: response.body as string }
   }
@@ -221,7 +232,7 @@ async function maybeEnrichCompanies(
         requestedAt,
       })
       if (!tickersAnswer.ok) {
-        errors.push(`SEC enrichment for ${profile.companyId} failed: ${tickersAnswer.errors.map((e) => e.message).join('; ')}`)
+        errors.push(`SEC enrichment for ${profile.companyId} failed: ${formatBridgeErrors(tickersAnswer as { errors?: readonly { message: string }[]; error?: { message?: string } }, 'tickers lookup failed')}`)
         enrichedCompanies.push(profile)
         continue
       }
@@ -253,7 +264,7 @@ async function maybeEnrichCompanies(
       })
       if (!subAnswer.ok || subAnswer.body.submissions === null) {
         errors.push(
-          `SEC enrichment for ${profile.companyId} failed: ${!subAnswer.ok ? subAnswer.errors.map((e) => e.message).join('; ') : 'no submissions document returned'}`,
+          `SEC enrichment for ${profile.companyId} failed: ${!subAnswer.ok ? formatBridgeErrors(subAnswer as { errors?: readonly { message: string }[]; error?: { message?: string } }, 'submissions lookup failed') : 'no submissions document returned'}`,
         )
         enrichedCompanies.push(profile)
         continue
@@ -308,7 +319,7 @@ export async function runLiveMatchCheck(
         requestedAt,
       })
       if (!answer.ok) {
-        errors.push(`GLEIF search failed: ${answer.errors.map((e) => e.message).join('; ')}`)
+        errors.push(`GLEIF search failed: ${formatBridgeErrors(answer as { errors?: readonly { message: string }[]; error?: { message?: string } }, 'GLEIF search failed')}`)
       } else {
         let parsed: unknown
         try {

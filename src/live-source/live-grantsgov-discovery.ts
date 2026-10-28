@@ -59,6 +59,7 @@ import { createGrantsGovAdapter } from '../automation/grantsgov-adapter'
 import type { GrantsGovTransport } from '../automation/grantsgov-adapter'
 import { GRANTS_GOV_BRIDGE_SEARCH_PATH } from './grantsgov-bridge/contract'
 import type { GrantsGovBridgeSearchRequest, GrantsGovBridgeSearchResponse } from './grantsgov-bridge/contract'
+import { resolveBridgeUrl } from './bridge-url'
 
 export const GRANTS_GOV_LIVE_RUN_ID_PREFIX = 'RUN-G'
 export const GRANTS_GOV_LIVE_PROFILE_ID = 'DP-LIVE-003'
@@ -105,7 +106,7 @@ export type GrantsGovBridgeClient = (request: GrantsGovBridgeSearchRequest) => P
 
 export function defaultGrantsGovBridgeClient(): GrantsGovBridgeClient {
   return async (request) => {
-    const response = await globalThis.fetch(GRANTS_GOV_BRIDGE_SEARCH_PATH, {
+    const response = await globalThis.fetch(resolveBridgeUrl(GRANTS_GOV_BRIDGE_SEARCH_PATH), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(request),
@@ -226,7 +227,11 @@ export function createLiveGrantsGovDiscovery(options: {
   function transportFor(response: GrantsGovBridgeSearchResponse): GrantsGovTransport {
     return () => {
       if (!response.ok) {
-        throw new Error(response.errors.map((error) => error.message).join('; '))
+        const message =
+          Array.isArray(response.errors) && response.errors.length > 0
+            ? response.errors.map((error) => error.message).join('; ')
+            : (response as { error?: { message?: string } }).error?.message ?? 'live Grants.gov search failed'
+        throw new Error(message)
       }
       return { status: response.status, body: response.body }
     }

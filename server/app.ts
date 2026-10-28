@@ -88,7 +88,8 @@ function originDecision(req: IncomingMessage, allowed: ReadonlySet<string>): Ori
   const lower = origin.toLowerCase()
   const host = headerValue(req, 'host')?.toLowerCase()
   if (host !== undefined && (lower === `http://${host}` || lower === `https://${host}`)) return 'same-origin'
-  return allowed.has(lower) ? 'allowlisted' : 'denied'
+  if (allowed.has('*') || allowed.has(lower)) return 'allowlisted'
+  return 'denied'
 }
 
 function safeResolve(distDir: string, urlPath: string): string | null {

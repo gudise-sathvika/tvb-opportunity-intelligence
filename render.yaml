@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: tvb-opportunity-backend
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health/ready
+    envVars:
+      - key: TVB_HOST
+        value: 0.0.0.0
+      - key: TVB_ALLOW_NON_LOOPBACK
+        value: "1"
+      - key: TVB_ALLOWED_ORIGINS
+        value: "*"
+

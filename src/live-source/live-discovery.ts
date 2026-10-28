@@ -55,6 +55,7 @@ import { TED_BRIDGE_SEARCH_PATH } from './ted-bridge/contract'
 import type { TedBridgeSearchRequest, TedBridgeSearchResponse } from './ted-bridge/contract'
 import { FTS_BRIDGE_SEARCH_PATH } from './fts-bridge/contract'
 import type { FtsBridgeSearchRequest, FtsBridgeSearchResponse } from './fts-bridge/contract'
+import { resolveBridgeUrl } from './bridge-url'
 
 export const TED_LIVE_RUN_ID_PREFIX = 'RUN-T'
 export const TED_LIVE_PROFILE_ID = 'DP-LIVE-001'
@@ -95,7 +96,7 @@ export type TedBridgeClient = (request: TedBridgeSearchRequest) => Promise<TedBr
 
 export function defaultTedBridgeClient(): TedBridgeClient {
   return async (request) => {
-    const response = await globalThis.fetch(TED_BRIDGE_SEARCH_PATH, {
+    const response = await globalThis.fetch(resolveBridgeUrl(TED_BRIDGE_SEARCH_PATH), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(request),
@@ -153,7 +154,7 @@ export type FtsBridgeClient = (request: FtsBridgeSearchRequest) => Promise<FtsBr
 
 export function defaultFtsBridgeClient(): FtsBridgeClient {
   return async (request) => {
-    const response = await globalThis.fetch(FTS_BRIDGE_SEARCH_PATH, {
+    const response = await globalThis.fetch(resolveBridgeUrl(FTS_BRIDGE_SEARCH_PATH), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(request),
@@ -287,7 +288,11 @@ export function createLiveTedDiscovery(options: {
   function transportFor(response: TedBridgeSearchResponse): TedTransport {
     return () => {
       if (!response.ok) {
-        throw new Error(response.errors.map((error) => error.message).join('; '))
+        const message =
+          Array.isArray(response.errors) && response.errors.length > 0
+            ? response.errors.map((error) => error.message).join('; ')
+            : (response as { error?: { message?: string } }).error?.message ?? 'live TED search failed'
+        throw new Error(message)
       }
       return { status: response.status, body: response.body }
     }
@@ -303,7 +308,11 @@ export function createLiveTedDiscovery(options: {
   function ftsTransportFor(response: FtsBridgeSearchResponse): FtsTransport {
     return () => {
       if (!response.ok) {
-        throw new Error(response.errors.map((error) => error.message).join('; '))
+        const message =
+          Array.isArray(response.errors) && response.errors.length > 0
+            ? response.errors.map((error) => error.message).join('; ')
+            : (response as { error?: { message?: string } }).error?.message ?? 'live FTS search failed'
+        throw new Error(message)
       }
       return { status: response.status, body: response.body }
     }

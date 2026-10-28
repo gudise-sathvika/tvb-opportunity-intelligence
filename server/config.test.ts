@@ -42,6 +42,11 @@ test('refuses a non-loopback bind unless the operator explicitly opts in', () =>
   assert.equal(opted.host, '0.0.0.0')
 })
 
+test('allows wildcard origin', () => {
+  const config = readHostConfig({ TVB_ALLOWED_ORIGINS: '*' }, process.cwd())
+  assert.deepEqual(config.allowedOrigins, ['*'])
+})
+
 test('rejects malformed allowed origins', () => {
   assert.throws(() => readHostConfig({ TVB_ALLOWED_ORIGINS: 'not a url' }, process.cwd()), ConfigError)
   assert.throws(() => readHostConfig({ TVB_ALLOWED_ORIGINS: 'ftp://files.example' }, process.cwd()), ConfigError)

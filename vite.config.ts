@@ -1,6 +1,17 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+// Guard against uncatchable AssertionError in Node.js 24 undici TLS socket closure (assert(!this.paused))
+if (typeof process !== 'undefined' && process.on) {
+  process.on('uncaughtException', (err: unknown) => {
+    const error = err as { code?: string; message?: string }
+    if (error?.code === 'ERR_ASSERTION' && String(error?.message || '').includes('!this.paused')) {
+      return
+    }
+    console.error('Uncaught server exception:', err)
+  })
+}
+
 import { tvbVaultBridge } from './src/vault-bridge/plugin'
 import { tvbTedBridge } from './src/live-source/ted-bridge/plugin'
 import { tvbUsaSpendingBridge } from './src/live-source/usaspending-bridge/plugin'

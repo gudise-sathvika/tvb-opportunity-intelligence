@@ -99,6 +99,7 @@ function readOrigins(env: NodeJS.ProcessEnv): string[] {
     .map((origin) => origin.trim())
     .filter((origin) => origin !== '')
     .map((origin) => {
+      if (origin === '*') return '*'
       let url: URL
       try {
         url = new URL(origin)

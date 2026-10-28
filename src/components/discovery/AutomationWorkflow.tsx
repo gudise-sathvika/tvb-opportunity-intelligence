@@ -53,16 +53,16 @@ function SourceDetail({ companyId, result }: { companyId: string; result: Source
         Results received: {result.candidatesReceived} &middot; Candidates created: {result.candidatesCreated}
       </span>
       {isAccessBlocked(result) ? <span>Blocked &mdash; access required.</span> : null}
-      {result.errors.length > 0 ? (
+      {(result.errors?.length ?? 0) > 0 ? (
         <ul className="dg-agent__errors">
-          {result.errors.map((error, index) => (
+          {(result.errors ?? []).map((error, index) => (
             <li key={`${result.sourceId}:${index}`}>{error}</li>
           ))}
         </ul>
       ) : null}
-      {result.warnings.length > 0 ? (
+      {(result.warnings?.length ?? 0) > 0 ? (
         <ul className="dg-agent__warnings">
-          {result.warnings.map((warning, index) => (
+          {(result.warnings ?? []).map((warning, index) => (
             <li key={`${result.sourceId}:w${index}`}>{warning}</li>
           ))}
         </ul>
@@ -125,8 +125,8 @@ export default function AutomationWorkflow({ outcome }: { outcome: DiscoveryRunO
         <details className="dg-agent__detail" open={outcome.counts.candidatesReceived === 0}>
           <summary>Show source detail</summary>
           <ul className="dg-agent__list">
-            {outcome.companies.map((company) =>
-              company.sourceResults.map((result) => (
+            {(outcome.companies ?? []).map((company) =>
+              (company.sourceResults ?? []).map((result) => (
                 <SourceDetail key={`${company.companyId}:${result.sourceId}`} companyId={company.companyId} result={result} />
               )),
             )}
