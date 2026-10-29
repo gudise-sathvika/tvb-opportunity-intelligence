@@ -29,7 +29,7 @@ const INDIA_MASTER_GRANTS: readonly IndiaGrantOpportunity[] = [
     deadline: '2026-12-30',
     eligibleEntityTypes: ['commercial', 'for-profit', 'startup', 'sme', 'small business', 'Pvt Ltd'],
     sectorFocus: ['Software Services', 'AI', 'Custom Web Applications', 'EdTech', 'Enterprise ERP', 'SaaS', 'Cloud'],
-    applicationUrl: 'https://meitystartuphub.in/schemes/samridh',
+    applicationUrl: 'https://www.myscheme.gov.in/schemes/samridh',
     status: 'Open',
   },
   {
@@ -42,7 +42,7 @@ const INDIA_MASTER_GRANTS: readonly IndiaGrantOpportunity[] = [
     deadline: '2027-02-28',
     eligibleEntityTypes: ['commercial', 'for-profit', 'startup', 'sme', 'small business', 'Pvt Ltd'],
     sectorFocus: ['AI', 'Cloud Migration', 'Automated QA Testing', 'Software Services', 'HealthTech', 'IoT'],
-    applicationUrl: 'https://meitystartuphub.in/schemes/tide-2-0',
+    applicationUrl: 'https://www.myscheme.gov.in/schemes/tide-2-0',
     status: 'Open',
   },
   {
@@ -55,7 +55,7 @@ const INDIA_MASTER_GRANTS: readonly IndiaGrantOpportunity[] = [
     deadline: '2027-03-15',
     eligibleEntityTypes: ['commercial', 'for-profit', 'startup', 'sme', 'Pvt Ltd'],
     sectorFocus: ['Software Services', 'AI', 'Custom Web Applications', 'Mobile Apps', 'EdTech'],
-    applicationUrl: 'https://meitystartuphub.in/schemes/genesis',
+    applicationUrl: 'https://msh.meity.gov.in/schemes/genesis',
     status: 'Open',
   },
   {
@@ -96,7 +96,7 @@ const INDIA_MASTER_GRANTS: readonly IndiaGrantOpportunity[] = [
     deadline: '2027-01-31',
     eligibleEntityTypes: ['commercial', 'for-profit', 'startup', 'sme', 'small business', 'Pvt Ltd'],
     sectorFocus: ['Cybersecurity', 'Threat Detection', 'AI', 'Software Testing', 'Automated QA Testing'],
-    applicationUrl: 'https://idex.gov.in/open-challenge',
+    applicationUrl: 'https://www.myscheme.gov.in/schemes/idex',
     status: 'Open',
   },
   {
@@ -109,7 +109,7 @@ const INDIA_MASTER_GRANTS: readonly IndiaGrantOpportunity[] = [
     deadline: '2027-03-31',
     eligibleEntityTypes: ['commercial', 'for-profit', 'startup', 'sme', 'Pvt Ltd'],
     sectorFocus: ['AI', 'Computer Vision', 'Deep Learning', 'Edge AI', 'Software Services'],
-    applicationUrl: 'https://idex.gov.in/idex-prime',
+    applicationUrl: 'https://www.myscheme.gov.in/schemes/idex',
     status: 'Open',
   },
   {
@@ -122,7 +122,7 @@ const INDIA_MASTER_GRANTS: readonly IndiaGrantOpportunity[] = [
     deadline: '2027-06-30',
     eligibleEntityTypes: ['commercial', 'for-profit', 'startup', 'sme', 'Pvt Ltd'],
     sectorFocus: ['Software Services', 'GIS', 'AI', 'Cybersecurity', 'Autonomous Systems'],
-    applicationUrl: 'https://idex.gov.in/open-challenge',
+    applicationUrl: 'https://www.myscheme.gov.in/schemes/idex',
     status: 'Rolling',
   },
 
@@ -178,7 +178,7 @@ const INDIA_MASTER_GRANTS: readonly IndiaGrantOpportunity[] = [
     deadline: '2027-03-31',
     eligibleEntityTypes: ['commercial', 'for-profit', 'startup', 'Pvt Ltd'],
     sectorFocus: ['Software Services', 'AI', 'Cloud', 'Cybersecurity', 'FinTech'],
-    applicationUrl: 'https://dst.gov.in/',
+    applicationUrl: 'https://dst.gov.in/call-for-proposals',
     status: 'Open',
   },
 
@@ -237,7 +237,7 @@ const INDIA_MASTER_GRANTS: readonly IndiaGrantOpportunity[] = [
     state: 'Bangalore, Karnataka',
     eligibleEntityTypes: ['commercial', 'for-profit', 'startup', 'Pvt Ltd', 'Karnataka entity'],
     sectorFocus: ['Software Services', 'AI', 'Custom Web Applications', 'EdTech', 'Cloud Migration'],
-    applicationUrl: 'https://startup.karnataka.gov.in/',
+    applicationUrl: 'https://startup.karnataka.gov.in/elevate/',
     status: 'Open',
   },
   {
@@ -251,7 +251,7 @@ const INDIA_MASTER_GRANTS: readonly IndiaGrantOpportunity[] = [
     state: 'Bangalore, Karnataka',
     eligibleEntityTypes: ['commercial', 'for-profit', 'startup', 'sme', 'Pvt Ltd'],
     sectorFocus: ['AI', 'NLP', 'Computer Vision', 'Data Engineering', 'Software Services'],
-    applicationUrl: 'https://startup.karnataka.gov.in/',
+    applicationUrl: 'https://startup.karnataka.gov.in/elevate/',
     status: 'Open',
   },
   {
@@ -277,7 +277,7 @@ const INDIA_MASTER_GRANTS: readonly IndiaGrantOpportunity[] = [
     deadline: '2027-01-25',
     eligibleEntityTypes: ['commercial', 'for-profit', 'startup', 'Pvt Ltd'],
     sectorFocus: ['Software Services', 'Mobile Apps', 'AI', 'EdTech', 'HealthTech'],
-    applicationUrl: 'https://startuptn.in/',
+    applicationUrl: 'https://startuptn.in/tanseed',
     status: 'Open',
   },
 
@@ -292,7 +292,7 @@ const INDIA_MASTER_GRANTS: readonly IndiaGrantOpportunity[] = [
     deadline: '2027-01-15',
     eligibleEntityTypes: ['commercial', 'for-profit', 'startup', 'sme', 'Pvt Ltd'],
     sectorFocus: ['HealthTech', 'AI', 'Software Services', 'Mobile Apps', 'Computer Vision'],
-    applicationUrl: 'https://birac.nic.in/',
+    applicationUrl: 'https://www.birac.nic.in/call_proposal.php',
     status: 'Open',
   },
 
@@ -322,7 +322,7 @@ const INDIA_MASTER_GRANTS: readonly IndiaGrantOpportunity[] = [
     deadline: '2027-03-20',
     eligibleEntityTypes: ['commercial', 'for-profit', 'startup', 'sme', 'Pvt Ltd'],
     sectorFocus: ['GIS', 'Geospatial', 'AI', 'Computer Vision', 'Software Services'],
-    applicationUrl: 'https://www.inspace.gov.in/',
+    applicationUrl: 'https://www.inspace.gov.in/inspace?id=inspace_opportunities',
     status: 'Open',
   },
   {
@@ -426,7 +426,7 @@ const INDIA_MASTER_GRANTS: readonly IndiaGrantOpportunity[] = [
     deadline: "2027-02-28",
     eligibleEntityTypes: ["commercial","for-profit","startup","sme","Pvt Ltd"],
     sectorFocus: ["AI","Computer Vision","Robotics","Embedded Software","Software Services"],
-    applicationUrl: "https://idex.gov.in/open-challenge",
+    applicationUrl: "https://www.myscheme.gov.in/schemes/idex",
     status: "Open",
   },
   {
@@ -439,7 +439,7 @@ const INDIA_MASTER_GRANTS: readonly IndiaGrantOpportunity[] = [
     deadline: "2027-03-31",
     eligibleEntityTypes: ["commercial","for-profit","startup","sme","Pvt Ltd"],
     sectorFocus: ["Cybersecurity","Cryptography","Software Services","Cloud"],
-    applicationUrl: "https://idex.gov.in/open-challenge",
+    applicationUrl: "https://www.myscheme.gov.in/schemes/idex",
     status: "Open",
   },
   {
@@ -452,7 +452,7 @@ const INDIA_MASTER_GRANTS: readonly IndiaGrantOpportunity[] = [
     deadline: "2027-03-15",
     eligibleEntityTypes: ["commercial","for-profit","startup","sme","Pvt Ltd"],
     sectorFocus: ["GIS","Computer Vision","AI","Software Services","Remote Sensing"],
-    applicationUrl: "https://idex.gov.in/open-challenge",
+    applicationUrl: "https://www.myscheme.gov.in/schemes/idex",
     status: "Open",
   },
   {
@@ -465,7 +465,7 @@ const INDIA_MASTER_GRANTS: readonly IndiaGrantOpportunity[] = [
     deadline: "2027-01-30",
     eligibleEntityTypes: ["commercial","for-profit","startup","sme","Pvt Ltd"],
     sectorFocus: ["Robotics","Embedded Software","AI","Software Services","GIS"],
-    applicationUrl: "https://idex.gov.in/open-challenge",
+    applicationUrl: "https://www.myscheme.gov.in/schemes/idex",
     status: "Open",
   },
   {
@@ -478,7 +478,7 @@ const INDIA_MASTER_GRANTS: readonly IndiaGrantOpportunity[] = [
     deadline: "2027-02-15",
     eligibleEntityTypes: ["commercial","for-profit","startup","sme","Pvt Ltd"],
     sectorFocus: ["Telecom","Embedded Software","Software Testing","DSP","Software Services"],
-    applicationUrl: "https://idex.gov.in/open-challenge",
+    applicationUrl: "https://www.myscheme.gov.in/schemes/idex",
     status: "Open",
   },
   {
@@ -491,7 +491,7 @@ const INDIA_MASTER_GRANTS: readonly IndiaGrantOpportunity[] = [
     deadline: "2027-01-25",
     eligibleEntityTypes: ["commercial","for-profit","startup","sme","Pvt Ltd"],
     sectorFocus: ["AI","Cybersecurity","Telecom","Software Services","Signal Processing"],
-    applicationUrl: "https://idex.gov.in/open-challenge",
+    applicationUrl: "https://www.myscheme.gov.in/schemes/idex",
     status: "Open",
   },
   {
@@ -569,7 +569,7 @@ const INDIA_MASTER_GRANTS: readonly IndiaGrantOpportunity[] = [
     deadline: "2027-03-31",
     eligibleEntityTypes: ["commercial","for-profit","startup","sme","Pvt Ltd"],
     sectorFocus: ["Software Services","Enterprise ERP","AI","Cloud Architecture","HealthTech"],
-    applicationUrl: "https://dst.gov.in/",
+    applicationUrl: "https://dst.gov.in/call-for-proposals",
     status: "Open",
   },
   {
@@ -582,7 +582,7 @@ const INDIA_MASTER_GRANTS: readonly IndiaGrantOpportunity[] = [
     deadline: "2027-04-30",
     eligibleEntityTypes: ["commercial","for-profit","startup","sme","Pvt Ltd"],
     sectorFocus: ["Quantum Computing","AI","Cybersecurity","Software Services","FinTech"],
-    applicationUrl: "https://dst.gov.in/",
+    applicationUrl: "https://dst.gov.in/call-for-proposals",
     status: "Open",
   },
   {
@@ -608,7 +608,7 @@ const INDIA_MASTER_GRANTS: readonly IndiaGrantOpportunity[] = [
     deadline: "2027-02-15",
     eligibleEntityTypes: ["commercial","for-profit","startup","sme","Pvt Ltd"],
     sectorFocus: ["HealthTech","AI","Computer Vision","Software Services","Mobile Apps"],
-    applicationUrl: "https://birac.nic.in/",
+    applicationUrl: "https://www.birac.nic.in/call_proposal.php",
     status: "Open",
   },
   {
@@ -621,7 +621,7 @@ const INDIA_MASTER_GRANTS: readonly IndiaGrantOpportunity[] = [
     deadline: "2027-03-15",
     eligibleEntityTypes: ["commercial","for-profit","startup","sme","Pvt Ltd"],
     sectorFocus: ["HealthTech","Mobile Apps","Software Services","Civic Tech","Custom Web Applications"],
-    applicationUrl: "https://birac.nic.in/",
+    applicationUrl: "https://www.birac.nic.in/call_proposal.php",
     status: "Open",
   },
   {
@@ -634,7 +634,7 @@ const INDIA_MASTER_GRANTS: readonly IndiaGrantOpportunity[] = [
     deadline: "2027-03-31",
     eligibleEntityTypes: ["commercial","for-profit","startup","sme","Pvt Ltd"],
     sectorFocus: ["HealthTech","Bioinformatics","Data Engineering","Cloud","Software Services"],
-    applicationUrl: "https://birac.nic.in/",
+    applicationUrl: "https://www.birac.nic.in/call_proposal.php",
     status: "Open",
   },
   {
@@ -647,7 +647,7 @@ const INDIA_MASTER_GRANTS: readonly IndiaGrantOpportunity[] = [
     deadline: "2027-01-31",
     eligibleEntityTypes: ["commercial","for-profit","startup","sme","Pvt Ltd"],
     sectorFocus: ["Software Services","AI","Custom Web Applications","FinTech","SaaS","Mobile Apps"],
-    applicationUrl: "https://startup.karnataka.gov.in/",
+    applicationUrl: "https://startup.karnataka.gov.in/elevate/",
     status: "Open",
     state: "Bangalore, Karnataka",
   },
@@ -759,7 +759,7 @@ const INDIA_MASTER_GRANTS: readonly IndiaGrantOpportunity[] = [
     deadline: "2027-02-22",
     eligibleEntityTypes: ["commercial","for-profit","startup","sme","Pvt Ltd"],
     sectorFocus: ["Software Services","SaaS","AI","Custom Web Applications","HealthTech"],
-    applicationUrl: "https://startuptn.in/",
+    applicationUrl: "https://startuptn.in/tanseed",
     status: "Open",
     state: "Chennai, Tamil Nadu",
   },

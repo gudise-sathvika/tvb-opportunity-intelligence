@@ -46,3 +46,4 @@ export interface BatchCompanyEnrichmentResponse {
   readonly profiles: readonly EnrichedCompanyProfile[]
   readonly errors?: readonly string[]
 }
+

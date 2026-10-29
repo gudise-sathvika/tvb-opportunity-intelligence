@@ -62,3 +62,4 @@ export async function requestCompanyEnrichment(
     return null
   }
 }
+
