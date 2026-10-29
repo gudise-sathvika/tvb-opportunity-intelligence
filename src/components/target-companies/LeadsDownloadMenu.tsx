@@ -57,7 +57,7 @@ export default function LeadsDownloadMenu({
   }
 
   const handleDownloadBatch = (batch: LeadBatchInfo) => {
-    downloadLeadsCsv(results, companyName, 'sathvika', {
+    downloadLeadsCsv(results, companyName, 'Sathvika', {
       offset: batch.offset,
       limit: batch.limit,
       batchLabel: `${batch.start}-to-${batch.end}`,

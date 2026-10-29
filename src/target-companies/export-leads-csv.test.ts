@@ -64,7 +64,7 @@ test('isPotentialLead returns true for relevant and potentially_relevant only', 
   assert.equal(isPotentialLead({ ...base, outcome: 'insufficient_evidence' }), false)
 })
 
-test('generateLeadsCsv includes only potential leads and formats all 21 columns with owner sathvika', () => {
+test('generateLeadsCsv includes only potential leads and formats all 21 columns with owner Sathvika', () => {
   const relevantRec: TargetRelevanceResult = {
     companyId: 'C1',
     companyName: 'OpenRAG Systems',
@@ -135,7 +135,7 @@ test('generateLeadsCsv includes only potential leads and formats all 21 columns 
 
   assert.equal(countPotentialLeads(results), 1)
 
-  const csvOutput = generateLeadsCsv(results, 'sathvika')
+  const csvOutput = generateLeadsCsv(results, 'Sathvika')
   const lines = csvOutput.split('\r\n')
   assert.equal(lines.length, 2) // Header + 1 lead row (not_relevant row is excluded)
 
@@ -150,7 +150,7 @@ test('generateLeadsCsv includes only potential leads and formats all 21 columns 
   assert.equal(cells[5], 'OpenRAG Systems') // Relevant TVB related Company
   assert.equal(cells[15], 'Grants.gov') // Source
   assert.equal(cells[16], '5') // Fit score
-  assert.equal(cells[17], 'sathvika') // Owner
+  assert.equal(cells[17], 'Sathvika') // Owner
   assert.equal(cells[18], '') // Date added (empty)
   assert.equal(cells[19], '') // Last updated (empty)
 })
@@ -206,18 +206,18 @@ test('generateLeadsCsv honors offset and limit options', () => {
   ]
 
   // All 3 leads
-  const allCsv = generateLeadsCsv(results, 'sathvika')
+  const allCsv = generateLeadsCsv(results, 'Sathvika')
   assert.equal(allCsv.split('\r\n').length, 4) // 1 header + 3 rows
 
   // First 2 leads
-  const batch1 = generateLeadsCsv(results, 'sathvika', { offset: 0, limit: 2 })
+  const batch1 = generateLeadsCsv(results, 'Sathvika', { offset: 0, limit: 2 })
   const batch1Lines = batch1.split('\r\n')
   assert.equal(batch1Lines.length, 3) // 1 header + 2 rows
   assert.ok(batch1Lines[1].includes('OPP-1')) // highest score first
   assert.ok(batch1Lines[2].includes('OPP-2'))
 
   // Next 1 lead
-  const batch2 = generateLeadsCsv(results, 'sathvika', { offset: 2, limit: 2 })
+  const batch2 = generateLeadsCsv(results, 'Sathvika', { offset: 2, limit: 2 })
   const batch2Lines = batch2.split('\r\n')
   assert.equal(batch2Lines.length, 2) // 1 header + 1 row
   assert.ok(batch2Lines[1].includes('OPP-3'))

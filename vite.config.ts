@@ -20,6 +20,10 @@ import { tvbEuSediaBridge } from './src/live-source/eu-sedia-bridge/plugin'
 import { tvbFtsBridge } from './src/live-source/fts-bridge/plugin'
 import { tvbGleifBridge } from './src/live-source/gleif-bridge/plugin'
 import { tvbSecBridge } from './src/live-source/sec-bridge/plugin'
+import { tvbGemBridge } from './src/live-source/gem-bridge/plugin'
+import { tvbIndiaGrantsBridge } from './src/live-source/india-grants-bridge/plugin'
+import { tvbWorldBankBridge } from './src/live-source/worldbank-bridge/plugin'
+import { tvbEnrichmentBridge } from './src/live-source/enrichment-bridge/plugin'
 
 // Frontend-only prototype. No proxy, no external API. The Phase V vault
 // bridge is local middleware on the dev and preview servers
@@ -43,6 +47,10 @@ export default defineConfig({
     tvbFtsBridge(),
     tvbGleifBridge(),
     tvbSecBridge(),
+    tvbGemBridge(),
+    tvbIndiaGrantsBridge(),
+    tvbWorldBankBridge(),
+    tvbEnrichmentBridge(),
   ],
   server: {
     port: 5173,

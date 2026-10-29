@@ -38,6 +38,24 @@ import type { GleifBridgeSearchRequest } from '../src/live-source/gleif-bridge/c
 import { handleSecEnrichBridge } from '../src/live-source/sec-bridge/handler'
 import { SEC_BRIDGE_ENRICH_PATH } from '../src/live-source/sec-bridge/contract'
 import type { SecBridgeEnrichRequest } from '../src/live-source/sec-bridge/contract'
+import { handleGemBridge } from '../src/live-source/gem-bridge/handler'
+import { GEM_BRIDGE_SEARCH_PATH } from '../src/live-source/gem-bridge/contract'
+import type { GemBridgeSearchRequest } from '../src/live-source/gem-bridge/contract'
+import { handleIndiaGrantsBridge } from '../src/live-source/india-grants-bridge/handler'
+import { INDIA_GRANTS_BRIDGE_SEARCH_PATH } from '../src/live-source/india-grants-bridge/contract'
+import type { IndiaGrantsBridgeSearchRequest } from '../src/live-source/india-grants-bridge/contract'
+import { handleWorldBankBridge } from '../src/live-source/worldbank-bridge/handler'
+import { WORLDBANK_BRIDGE_SEARCH_PATH } from '../src/live-source/worldbank-bridge/contract'
+import type { WorldBankBridgeSearchRequest } from '../src/live-source/worldbank-bridge/contract'
+import { enrichTargetCompany, handleBatchCompanyEnrichment } from '../src/live-source/enrichment-bridge/handler'
+import {
+  ENRICHMENT_BRIDGE_BATCH_PATH,
+  ENRICHMENT_BRIDGE_ENRICH_PATH,
+} from '../src/live-source/enrichment-bridge/contract'
+import type {
+  BatchCompanyEnrichmentRequest,
+  CompanyEnrichmentRequest,
+} from '../src/live-source/enrichment-bridge/contract'
 import { createRequestListener } from './app'
 import { ConfigError, readHostConfig } from './config'
 import type { HostConfig } from './config'
@@ -67,6 +85,17 @@ export function createProductionServer(config: HostConfig): ProductionHost {
       [FTS_BRIDGE_SEARCH_PATH]: (value) => handleFtsBridge(value as FtsBridgeSearchRequest | null),
       [GLEIF_BRIDGE_SEARCH_PATH]: (value) => handleGleifBridge(value as GleifBridgeSearchRequest | null),
       [SEC_BRIDGE_ENRICH_PATH]: (value) => handleSecEnrichBridge(value as SecBridgeEnrichRequest | null),
+      [GEM_BRIDGE_SEARCH_PATH]: (value) => handleGemBridge(value as GemBridgeSearchRequest | null),
+      [INDIA_GRANTS_BRIDGE_SEARCH_PATH]: (value) => handleIndiaGrantsBridge(value as IndiaGrantsBridgeSearchRequest | null),
+      [WORLDBANK_BRIDGE_SEARCH_PATH]: (value) => handleWorldBankBridge(value as WorldBankBridgeSearchRequest | null),
+      [ENRICHMENT_BRIDGE_ENRICH_PATH]: async (value) => {
+        const res = await enrichTargetCompany(value as CompanyEnrichmentRequest)
+        return { httpStatus: res.status, body: res }
+      },
+      [ENRICHMENT_BRIDGE_BATCH_PATH]: async (value) => {
+        const res = await handleBatchCompanyEnrichment(value as BatchCompanyEnrichmentRequest)
+        return { httpStatus: res.status, body: res }
+      },
     },
     allowedOrigins: config.allowedOrigins,
     rateLimit: config.rateLimit,

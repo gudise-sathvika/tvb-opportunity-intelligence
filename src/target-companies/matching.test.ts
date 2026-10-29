@@ -58,6 +58,39 @@ test('Bangalore, India matches India', () => {
   assert.ok(result.matchedFields.includes('country'))
 })
 
+test('dual-branch company with presence in India and US matches both Indian and US opportunities', () => {
+  const dualCompany = {
+    companyId: 'C-DUAL',
+    name: 'Pacewisdom Solutions',
+    country: 'Bangalore, India and San Francisco, US',
+    sector: 'Software Services, AI',
+    capabilities: ['custom web applications', 'cloud migration'],
+  }
+
+  // 1. Indian opportunity match
+  const indiaResult = evaluateTargetCompanyRelevance(
+    dualCompany,
+    { opportunityId: 'O-IN', opportunityType: 'funding', title: 'MeitY Software Innovation Grant', description: 'custom web applications', country: 'India', sourceUrl: 'https://meity.gov.in/1' },
+  )
+  assert.ok(indiaResult.matchedFields.includes('country'))
+  assert.ok(indiaResult.reasons.some((r) => r.includes('India headquarters / operating branch')))
+
+  // 2. US opportunity match
+  const usResult = evaluateTargetCompanyRelevance(
+    dualCompany,
+    { opportunityId: 'O-US', opportunityType: 'procurement', title: 'US Federal Cloud Migration RFP', description: 'cloud migration', country: 'US', sourceUrl: 'https://grants.gov/1' },
+  )
+  assert.ok(usResult.matchedFields.includes('country'))
+  assert.ok(usResult.reasons.some((r) => r.includes('US branch / operating subsidiary')))
+
+  // 3. Negative test: Non-operating country (e.g. UK restricted) produces geographic mismatch
+  const ukResult = evaluateTargetCompanyRelevance(
+    dualCompany,
+    { opportunityId: 'O-UK', opportunityType: 'procurement', title: 'UK Domestic Procurement', description: 'software services', country: 'United Kingdom', sourceUrl: 'https://ted.europa.eu/1' },
+  )
+  assert.ok(ukResult.mismatchedFields.includes('country'))
+})
+
 test('generic single-term overlap is not enough for relevant', () => {
   const result = evaluateTargetCompanyRelevance(
     { companyId: 'C7', name: 'Acme', sector: 'AI Infrastructure', country: 'US' },

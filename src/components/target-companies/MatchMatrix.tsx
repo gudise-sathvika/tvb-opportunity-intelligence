@@ -223,9 +223,9 @@ export default function MatchMatrix({
         </div>
 
         <div className="sn-matrix-legend__badges">
-          <span className="sn-tag sn-tag--success" title="Evaluation score >= 70%">● Relevant (&ge; 70%)</span>
-          <span className="sn-tag sn-tag--warn" title="Evaluation score 40–69%">● Potentially Relevant (40–69%)</span>
-          <span className="sn-tag sn-tag--muted" title="Evaluation score < 40%">● Not Relevant (&lt; 40%)</span>
+          <span className="sn-tag sn-tag--success" title="High topical suitability with verified criteria">● Relevant</span>
+          <span className="sn-tag sn-tag--warn" title="High/moderate fit with unverified criteria or stated requirements">● Potential</span>
+          <span className="sn-tag sn-tag--muted" title="Low topical alignment or disqualified">● Not Relevant</span>
           <span className="sn-tag sn-tag--accent" title="Highest scoring company for the opportunity">★ Top Match (Row Peak)</span>
           <span className="sn-tag" style={{ background: 'var(--surface-2)', color: 'var(--text-muted)' }}>— Unassessed / Unknown</span>
         </div>

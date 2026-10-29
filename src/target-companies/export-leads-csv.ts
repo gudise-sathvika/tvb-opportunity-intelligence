@@ -6,7 +6,7 @@
  * Requirements:
  * 1. Only exports qualified leads (outcome === 'relevant' | 'potentially_relevant').
  * 2. Exact 21 columns in the reference CSV order.
- * 3. Owner defaults to 'sathvika'.
+ * 3. Owner defaults to 'Sathvika'.
  * 4. 'Date added' and 'Last updated' are left blank.
  * 5. Fit score scaled to 1–5.
  */
@@ -64,11 +64,51 @@ function escapeCsvCell(value: string | number | null | undefined): string {
   return str
 }
 
+export function buildMeaningfulLeadNote(
+  rec: TargetRelevanceResult,
+  record: TargetCompanyLiveDiscoveryRecord | undefined,
+  fitScore: number,
+  type: string,
+): string {
+  const parts: string[] = []
+
+  // 1. Fit assessment summary
+  const fitLabel = fitScore >= 4 ? 'High Fit' : fitScore === 3 ? 'Moderate Fit' : 'Potential Fit'
+  const matchPct = typeof rec.score === 'number' ? `${rec.score}% match` : 'Qualified'
+  parts.push(`[${fitLabel} • ${matchPct}]`)
+
+  // 2. Specific matching rationale
+  const specificReasons = (rec.reasons ?? []).filter(
+    (r) => !r.toLowerCase().includes('generic keywords') && !r.toLowerCase().includes('scope is unevidenced')
+  )
+  if (specificReasons.length > 0) {
+    parts.push(specificReasons.join(' '))
+  } else if (rec.matchedFields && rec.matchedFields.length > 0) {
+    parts.push(`Aligned with company capabilities in ${rec.matchedFields.join(', ')}.`)
+  } else {
+    parts.push(`Topical alignment on technology services for ${rec.companyName}.`)
+  }
+
+  // 3. Actionable next step
+  if (type === 'RFP') {
+    parts.push('Action: Review RFP scope, technical requirements, and prepare bid submission.')
+  } else {
+    parts.push('Action: Review grant guidelines, eligibility criteria, and prepare funding application.')
+  }
+
+  const deadline = rec.deadline || record?.deadline
+  if (deadline) {
+    parts.push(`Deadline: ${deadline}.`)
+  }
+
+  return parts.join(' ')
+}
+
 export function buildOpportunityLeadRow(
   rec: TargetRelevanceResult,
   record: TargetCompanyLiveDiscoveryRecord | undefined,
   companySector?: string | null,
-  owner = 'sathvika',
+  owner = 'Sathvika',
 ): string[] {
   const isProcurement = rec.opportunityType === 'procurement'
   const type = isProcurement ? 'RFP' : 'Grant'
@@ -77,6 +117,14 @@ export function buildOpportunityLeadRow(
   const isGrantsGov = record?.source === 'grantsgov' || sourceHost.includes('grants.gov')
   const isTed = record?.source === 'ted' || sourceHost.includes('ted.europa.eu')
   const isEu = record?.source === 'eu-sedia' || sourceHost.includes('europa.eu')
+  const isGem = record?.source === 'gem' || sourceHost.includes('gem.gov.in') || sourceHost.includes('eprocure.gov.in')
+  const isIndiaGrants =
+    record?.source === 'india-grants' ||
+    sourceHost.includes('meity') ||
+    sourceHost.includes('idex') ||
+    sourceHost.includes('startupindia') ||
+    sourceHost.includes('birac')
+  const isWorldBank = record?.source === 'worldbank' || sourceHost.includes('worldbank.org')
 
   const sourceName = isGrantsGov
     ? 'Grants.gov'
@@ -84,7 +132,13 @@ export function buildOpportunityLeadRow(
       ? 'TED Procurement'
       : isEu
         ? 'EU Funding & Tenders'
-        : 'Public Source'
+        : isGem
+          ? 'GeM & CPPP India'
+          : isIndiaGrants
+            ? 'MeitY / iDEX Innovation Grants'
+            : isWorldBank
+              ? 'World Bank Procurement'
+              : 'Public Source'
 
   const issuer = isGrantsGov
     ? 'US Federal Agency'
@@ -92,15 +146,23 @@ export function buildOpportunityLeadRow(
       ? 'European Public Procurement Authority'
       : isEu
         ? 'European Commission'
-        : 'Public Authority'
+        : isGem
+          ? 'Government of India (GeM/CPPP)'
+          : isIndiaGrants
+            ? 'MeitY / Ministry of Defence / DPIIT'
+            : isWorldBank
+              ? 'World Bank & Multilateral Development Banks'
+              : 'Public Authority'
 
   const geography = isGrantsGov
     ? 'United States'
     : isTed || isEu
       ? 'European Union'
-      : 'International'
+      : isGem || isIndiaGrants
+        ? 'India'
+        : 'International / Global'
 
-  const currency = isGrantsGov ? 'USD' : isTed || isEu ? 'EUR' : 'USD'
+  const currency = isGrantsGov || isWorldBank ? 'USD' : isTed || isEu ? 'EUR' : isGem || isIndiaGrants ? 'INR' : 'USD'
   const fitScore = fitScore1to5(rec.score, rec.outcome)
 
   const sector =
@@ -113,7 +175,7 @@ export function buildOpportunityLeadRow(
     record?.description ||
     (Array.isArray(rec.reasons) && rec.reasons.length > 0 ? rec.reasons.join(' ') : rec.opportunityTitle)
 
-  const notes = Array.isArray(rec.reasons) && rec.reasons.length > 0 ? rec.reasons.join(' ') : ''
+  const notes = buildMeaningfulLeadNote(rec, record, fitScore, type)
 
   return [
     rec.opportunityId || record?.sourceRecordId || 'N/A', // Opportunity ID
@@ -179,7 +241,7 @@ export interface GenerateLeadsCsvOptions {
 
 export function generateLeadsCsv(
   results: readonly TargetCompanyLiveDiscoveryResult[],
-  owner = 'sathvika',
+  owner = 'Sathvika',
   options?: GenerateLeadsCsvOptions,
 ): string {
   const recordMap = new Map<string, TargetCompanyLiveDiscoveryRecord>()
@@ -268,7 +330,7 @@ export interface DownloadLeadsCsvOptions extends GenerateLeadsCsvOptions {
 export function downloadLeadsCsv(
   results: readonly TargetCompanyLiveDiscoveryResult[],
   companyName?: string,
-  owner = 'sathvika',
+  owner = 'Sathvika',
   options?: DownloadLeadsCsvOptions,
 ): void {
   const csvContent = generateLeadsCsv(results, owner, options)

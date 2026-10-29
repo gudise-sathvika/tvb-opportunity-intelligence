@@ -34,10 +34,12 @@ export interface TargetCompanyMatchInput {
   readonly companyId: string
   readonly name: string
   readonly country?: string | null
+  readonly countries?: readonly string[] | null
   readonly sector?: string | null
   readonly capabilities?: readonly string[] | null
   readonly description?: string | null
   readonly companyType?: string | null
+  readonly website?: string | null
 }
 
 export interface TargetOpportunityInput {
@@ -143,6 +145,48 @@ export function normalizeCountry(value: string | null | undefined): string {
   return aliases[cleaned] ?? cleaned
 }
 
+export function extractCountryCodes(value: string | readonly string[] | null | undefined): Set<string> {
+  if (!value) return new Set()
+  const result = new Set<string>()
+
+  const items = Array.isArray(value) ? value : [value]
+  for (const item of items) {
+    if (!item || typeof item !== 'string') continue
+    const text = item.toLowerCase()
+
+    if (/\b(india|bharat|bangalore|bengaluru|delhi|mumbai|hyderabad|chennai|pune|kerala|karnataka|telangana|tamil nadu|\.in)\b/i.test(text)) {
+      result.add('in')
+    }
+    if (/\b(united states|usa|u\.s\.a?|u\.s\b|us\b|america|california|texas|delaware|new york|san francisco|austin|seattle)\b/i.test(text)) {
+      result.add('us')
+    }
+    if (/\b(united kingdom|uk\b|u\.k\b|great britain|england|london|manchester)\b/i.test(text)) {
+      result.add('uk')
+    }
+    if (/\b(germany|deutschland|berlin|munich)\b/i.test(text)) {
+      result.add('de')
+    }
+    if (/\b(france|paris)\b/i.test(text)) {
+      result.add('fr')
+    }
+
+    const chunks = text.split(/[\r\n,;&/]+|\band\b/i).map((c) => c.replace(/[^a-z0-9 ]+/g, '').trim()).filter(Boolean)
+    for (const chunk of chunks) {
+      const normalized = normalizeCountry(chunk)
+      if (normalized) {
+        result.add(normalized)
+      }
+    }
+
+    if (result.size === 0) {
+      const single = normalizeCountry(item)
+      if (single) result.add(single)
+    }
+  }
+
+  return result
+}
+
 function tokens(value: string | null | undefined): string[] {
   if (!value) return []
   return [
@@ -206,7 +250,7 @@ function detectCompanyEntityCategory(company: TargetCompanyMatchInput): 'nonprof
   if (/nonprofit|501\(c\)|research institute/i.test(typeText)) return 'nonprofit'
   if (/higher education|university|universities|college/i.test(typeText)) return 'higher_ed'
   if (/government|municipality|state agency/i.test(typeText)) return 'government'
-  if (/for-profit|commercial|sme|small business|pvt\.? ltd|ltd|inc|corporation/i.test(typeText)) return 'for_profit'
+  if (/for-profit|commercial|sme|small business|pvt\.? ltd|ltd|inc|corporation|technolog|software|services|startup/i.test(typeText)) return 'for_profit'
   return null
 }
 
@@ -221,18 +265,31 @@ export function evaluateTargetCompanyRelevance(
   const reasons: string[] = []
 
   // 1. Geography evaluation
-  const companyCountry = normalizeCountry(company.country)
-  const opportunityCountry = normalizeCountry(opportunity.country)
-  if (companyCountry && opportunityCountry) {
-    if (companyCountry === opportunityCountry) {
+  const companyCountries = extractCountryCodes(
+    company.countries && company.countries.length > 0 ? company.countries : company.country,
+  )
+  const opportunityCountries = extractCountryCodes(opportunity.country)
+
+  if (companyCountries.size > 0 && opportunityCountries.size > 0) {
+    const common = [...companyCountries].filter((code) => opportunityCountries.has(code))
+    if (common.length > 0) {
       matchedFields.push('country')
-      reasons.push(`Country matches: ${company.country}.`)
+      const branchLabel = common.includes('in')
+        ? 'India headquarters / operating branch'
+        : common.includes('us')
+          ? 'US branch / operating subsidiary'
+          : common[0]
+      reasons.push(
+        companyCountries.size > 1
+          ? `Country matches via company operating presence: ${branchLabel}.`
+          : `Country matches: ${company.country}.`,
+      )
     } else {
       mismatchedFields.push('country')
       reasons.push(`Country differs: company ${company.country}, opportunity ${opportunity.country}.`)
     }
   } else {
-    missingFields.push(companyCountry ? 'opportunity.country' : 'company.country')
+    missingFields.push(companyCountries.size > 0 ? 'opportunity.country' : 'company.country')
     uncertainty.push('Geographic eligibility cannot be confirmed because country information is missing.')
   }
 
@@ -431,13 +488,20 @@ export function evaluateTargetCompanyRelevance(
       : 'Applicant type not supplied by source.',
   }
 
+  const hasGeoMatch =
+    companyCountries.size > 0 && opportunityCountries.size > 0 && [...companyCountries].some((c) => opportunityCountries.has(c))
+
   const geography: TargetRelevanceFactor = {
-    score: companyCountry && opportunityCountry ? (companyCountry === opportunityCountry ? 100 : 0) : null,
+    score: companyCountries.size > 0 && opportunityCountries.size > 0 ? (hasGeoMatch ? 100 : 0) : null,
     weight: 10,
-    evidence: companyCountry && opportunityCountry ? [companyCountry, opportunityCountry] : [],
-    reason: companyCountry && opportunityCountry
-      ? (companyCountry === opportunityCountry ? 'Geography evaluated: countries match.' : 'Geography evaluated: countries differ.')
-      : 'Geography information is missing.',
+    evidence:
+      companyCountries.size > 0 && opportunityCountries.size > 0
+        ? [...companyCountries, ...opportunityCountries]
+        : [],
+    reason:
+      companyCountries.size > 0 && opportunityCountries.size > 0
+        ? (hasGeoMatch ? 'Geography evaluated: operating countries match.' : 'Geography evaluated: countries differ.')
+        : 'Geography information is missing.',
   }
 
   const companyStage: TargetRelevanceFactor = {
