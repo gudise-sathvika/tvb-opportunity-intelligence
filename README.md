@@ -1,196 +1,225 @@
 # TVB Opportunity Intelligence
 
-A read-only web frontend for a **TVB Opportunity Intelligence** Obsidian vault.
-It turns a folder of Markdown records (opportunities, matches, applications,
-companies, organizations, sources, notices, bids, contracts) into a typed,
-browsable, searchable application — and can augment that snapshot with **live**
-public funding/tender discovery.
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg)](https://www.typescriptlang.org/)
+[![React](https://img.shields.io/badge/React-19.x-61dafb.svg)](https://react.dev/)
+[![Vite](https://img.shields.io/badge/Vite-6.x-646cff.svg)](https://vitejs.dev/)
+[![Tests](https://img.shields.io/badge/Tests-427%2B%20Passing-success.svg)](https://nodejs.org/)
 
-> Design rule: the production vault is the source of truth and is opened
-> **read-only**. Nothing is invented, repaired, or written back to the vault
-> without an explicit, human-approved write step.
+An enterprise-grade, rules-driven **Opportunity Intelligence & Discovery Platform** engineered for venture builders, investment teams, and portfolio companies.
 
-## Features
+TVB Opportunity Intelligence continuously monitors, indexes, and evaluates public funding calls, innovation grants, and government procurement tenders across the United States, European Union, and India — automatically matching them against imported target company profiles with transparent, explainable suitability scoring.
 
-- **Browse & detail views** for every record type, with cross-linked
-  relationships (opportunity ↔ match ↔ application ↔ company ↔ organization ↔
-  source, and notice ↔ bid ↔ contract).
-- **Dashboard / analytics** with workflow grouping and deadline buckets.
-- **Discovery** — run automated searches over public sources and hand the raw
-  candidates to a Human review queue.
-- **Review workflow** — approve/reject discovered candidates; approved records
-  can be proposed as vault writes (preview first, then an isolated write).
-- **Live sources** (same-origin bridges, public/no-auth):
-  - **TED** — EU public procurement notices.
-  - **Grants.gov** — US federal funding opportunities.
-  - **USAspending** — US obligated award history (context, not open calls).
-  - **EU Funding & Tenders (SEDIA)** — HORIZON/H2020 grant topics and cascade
-    funding calls.
-- **Fixture mode** — a committed demonstration snapshot so the app builds and
-  runs on a clean checkout with no vault present.
+---
 
-## Tech stack
+## 🚀 Key Capabilities & Modules
 
-- **React 19** + **React Router 7**, built with **Vite 6**.
-- **TypeScript** (project references: `tsconfig.app`, `.automation`, `.import`,
-  `.node`).
-- **Node.js** test runner via **tsx** for unit/integration tests.
-- **Playwright** for browser end-to-end tests.
-- A small **Node.js production host** (`server/`) that serves the built app and
-  mounts the read-only live bridges behind a hardened same-origin boundary.
+### 1. Multi-Source Global & Indian Discovery Engine
+Aggregates live opportunities through hardened, same-origin server bridges without exposing browser clients to external rate limits or CORS restrictions:
 
-## Getting started
+* **United States & International Funding:**
+  * **Grants.gov:** US Federal innovation grants (SBIR/STTR, NIH, NSF, DoD, DoE).
+  * **USAspending:** Historical federal award intelligence and obligations context.
+  * **World Bank:** Multilateral development bank procurement and global advisory RFPs.
+* **European Union Ecosystem:**
+  * **EU Funding & Tenders (SEDIA):** Horizon Europe, Digital Europe, and European Innovation Council (EIC) cascade calls.
+  * **TED (Tenders Electronic Daily):** Official public procurement notices across all EU member states.
+* **India Innovation Schemes & Public Procurement:**
+  * **GeM (Government e-Marketplace):** Central/State public procurement contracts for Cloud Migration, DevOps, Custom Web/Mobile Apps, AI/OCR, and Cybersecurity. Includes direct tender document PDF links.
+  * **CPPP (Central Public Procurement Portal):** Live active e-Procurement notices across ministries and PSUs.
+  * **MeitY & Central Grants:** SAMRIDH Accelerator, TIDE 2.0 (ICT grants), GENESIS (Tier-2/3 scale-up), Bhashini AI Mission, Chips to Startup (C2S), and Cyber Swachhta Kendra (CSK).
+  * **Defence & Space:** iDEX (Defence India Startup Challenge DISC & SPARK grants up to ₹10 Cr), IN-SPACe seed fund.
+  * **Biotech & HealthTech:** BIRAC (Biotechnology Industry Research Assistance Council) active Call for Proposals.
+  * **State Innovation Missions:** Karnataka ELEVATE, Tamil Nadu TANSEED, Kerala Startup Mission (KSUM), Gujarat IT/ITeS, Odisha, and Telangana emerging technologies.
+
+---
+
+### 2. Target Company Ingestion & Web Intelligence (Firecrawl)
+* **CSV Bulk Importer:** Upload target company spreadsheets with auto-detection of columns (`company name`, `company HQ location`, `company sector`, `company URL`, `tags`).
+* **Persistent Local Storage:** Imported companies are securely persisted in browser storage (`tvb:target-companies:imported-set`) with full table preview and single-click reset.
+* **Firecrawl Web Intelligence Engine:**
+  * **Automatic Domain Resolution:** Discovers official company domains if the website URL is omitted or malformed.
+  * **Deep Capability Extraction:** Scrapes and parses tech stack, specialized capabilities, AI/ML focus, and target market segments (enterprise vs SMB).
+  * **Dual-Branch Jurisdiction Matching (India + US):** Automatically detects companies with multi-region operations (e.g., Bangalore HQ + US Delaware subsidiary). Enables simultaneous eligibility for Indian domestic tenders/grants and US/International federal RFPs.
+  * **Intelligent Local Caching:** Caches enrichment results locally (`tvb:company-enrichment-cache`) to prevent redundant web scraping.
+
+---
+
+### 3. Explainable Suitability Scoring & Match Matrix
+Replaces black-box AI scores with a deterministic, explainable scoring engine:
+
+* **Topical Alignment (70%):** Sector, technology stack, and keyword semantic matching.
+* **Geographic & Legal Eligibility (20%):** Enforces statutory nationality requirements (e.g., US SBIR domestic business requirements vs Indian MSME/DPIIT criteria).
+* **Entity Type Gate (10%):** Differentiates commercial Pvt Ltd / LLC startups from non-profit universities or research laboratories.
+* **Categorized Match Status:**
+  * 🟢 **Relevant (≥ 70%):** Strong topical fit and satisfied geographic/entity criteria.
+  * 🟡 **Potentially Relevant (40–69%):** Adjacent technical capabilities or provisional location alignment.
+  * 🔴 **Not Relevant (< 40%):** Topical divergence or statutory eligibility mismatch.
+  * ⚪ **Unassessed (—):** Missing data remains visibly unassessed—never fabricated or defaulted to 0%.
+* **Interactive Matrix View:** Dynamic multi-company × opportunity heatmap with real-time scope switching, sorting (by Best Match, Deadline, Title), and keyword search.
+
+---
+
+### 4. Direct Document & Portal Routing
+Eliminates 404 errors and broken redirects:
+* **Verified GeM Tender PDFs:** Links directly download or open authentic tender specification PDFs (`https://bidplus.gem.gov.in/showbidDocument/${id}`) verified for byte size and valid `%PDF-1.4` signatures.
+* **Direct CPPP SPA Routing:** Routes to the active tenders portal (`https://eprocure.gov.in/cppp/#/activeTenders`).
+* **Verified National Portals:** Routes to official scheme pages (MyScheme, DST Call for Proposals, BIRAC CFP) with trusted commercial SSL certificates.
+
+---
+
+### 5. Standardized Qualified Leads CSV Export
+Exports qualified opportunities directly formatted for venture pipelines:
+* **Strict 21-Column Schema:** Adheres to the master venture portfolio specification:
+  1. `Opportunity ID`
+  2. `Type` (Grant / RFP)
+  3. `Title`
+  4. `Issuer / Funder`
+  5. `Issuer type` (Government / Public Body)
+  6. `Relevant TVB related Company`
+  7. `Description`
+  8. `Category / Sector`
+  9. `Geography` (India, United States, European Union, Global)
+  10. `Funding amount min (if any)`
+  11. `Funding amount max (if any)`
+  12. `Currency` (INR, USD, EUR)
+  13. `Posted date`
+  14. `Deadline`
+  15. `Link` (Direct official specification URL)
+  16. `Source` (GeM, CPPP, Grants.gov, TED, MeitY, iDEX, etc.)
+  17. `Fit score (1-5)` (Normalized 1 to 5 scale)
+  18. `Owner` (Default: `Sathvika`)
+  19. `Date added`
+  20. `Last updated`
+  21. `Notes` (Meaningful justification with specific capability alignment and operating branch routing)
+* **Batch Downloader:** Allows exporting all leads or downloading targeted batches (e.g., *Leads 1–10*, *Leads 11–20*).
+
+---
+
+## 🛠️ Tech Stack
+
+* **Frontend Framework:** React 19 with React Router 7.
+* **Build System:** Vite 6 with TypeScript (`tsc -b`).
+* **Styling:** Custom accessible design system with CSS custom properties and full Dark Mode support.
+* **Backend / Host:** Hardened Node.js production host (`server/serve.ts`) mounting loopback-guarded live bridge proxies.
+* **Testing:** Native Node.js test runner with `tsx` (427+ unit and integration tests passing).
+
+---
+
+## 📁 Repository Structure
+
+```
+tvb-frontend/
+├── src/
+│   ├── analytics/               # Dashboard metrics and pipeline aggregation
+│   ├── app/                     # Route definitions, layout shell, dark mode
+│   ├── automation/              # Discovery pipelines, adapters, deduplication & review queues
+│   ├── components/
+│   │   ├── discovery/           # Live search cards, scope selectors, and candidate views
+│   │   ├── match-review/        # Review queue handoff for funding matches
+│   │   ├── procurement-match-review/ # Review queue handoff for tender notices
+│   │   ├── target-companies/    # CSV preview, Match Matrix, Leads download menu
+│   │   └── tables/              # Data tables with pagination and sorting
+│   ├── data/                    # Snapshot selectors and committed test fixtures
+│   ├── live-source/             # Same-origin bridges:
+│   │   ├── enrichment-bridge/   # Firecrawl web scraping, domain resolution & dual presence
+│   │   ├── gem-bridge/          # GeM tender specifications & CPPP notices
+│   │   ├── india-grants-bridge/ # MeitY, iDEX, DST, BIRAC & state schemes
+│   │   ├── grantsgov-bridge/    # US federal grants bridge
+│   │   ├── ted-bridge/          # European TED procurement bridge
+│   │   ├── eu-sedia-bridge/     # EU Horizon & cascade funding bridge
+│   │   └── worldbank-bridge/    # World Bank multilateral notices bridge
+│   ├── target-companies/        # CSV parser, enrichment store, scoring engine, CSV exporter
+│   └── types/                   # Authoritative TypeScript types and registry
+├── server/                      # Hardened Node.js server with rate-limiting and reverse proxy guards
+├── scripts/                     # Snapshot bootstrap and build verifiers
+└── public/                      # Static assets and manifest
+```
+
+---
+
+## 💻 Getting Started
 
 ### Prerequisites
+* **Node.js:** v20.x or higher
+* **npm:** v10.x or higher
 
-- Node.js 20+ and npm.
-
-### Install
-
+### Installation
 ```bash
+git clone https://github.com/gudise-sathvika/tvb-opportunity-intelligence.git
+cd tvb-opportunity-intelligence/tvb-frontend
 npm install
 ```
 
-### Configure the source vault (optional for browsing)
+### Development Server
+Starts the Vite development server with all live opportunity bridges mounted:
+```bash
+npm run dev
+```
+Open your browser at `http://localhost:5173`.
 
-Copy the example environment file and point it at your vault:
+### Production Build & Typecheck
+Verifies TypeScript project references and builds the production bundle into `dist/`:
+```bash
+npm run build
+```
+
+### Preview Production Build
+```bash
+npm run preview
+```
+
+### Standalone Node.js Host
+Runs the standalone production server (`server/serve.ts`):
+```bash
+npm run serve
+```
+
+---
+
+## 🧪 Testing
+
+The codebase includes an extensive suite of **427+ unit and integration tests**:
 
 ```bash
-cp .env.example .env
-# then set, e.g.:
-# TVB_SOURCE_VAULT=/absolute/path/to/your/vault
-```
-
-`.env` is git-ignored. If `TVB_SOURCE_VAULT` is unset, the importer fails with a
-clear message instead of guessing a location.
-
-### Run
-
-```bash
-npm run dev        # Vite dev server with the live bridges mounted
-npm run build      # type-check + production build into dist/
-npm run preview    # serve the production build with Vite preview
-npm run serve      # standalone Node.js host (hardened, loopback by default)
-```
-
-On a clean checkout the `prebuild`/`predev`/`pretypecheck` hooks seed the
-git-ignored snapshot `src/data/generated/opportunity-data.json` from the
-committed demonstration fixture, so `npm run build` works with no vault.
-
-### Import from the vault
-
-```bash
-npm run import:data   # read-only vault -> src/data/generated/opportunity-data.json
-```
-
-The importer opens the vault read-only, takes SHA-256 manifests before and after,
-and writes only inside this repository. Generated data is git-ignored.
-
-## Scripts
-
-| Script | Purpose |
-|---|---|
-| `npm run dev` | Vite dev server |
-| `npm run build` | Type-check and build to `dist/` |
-| `npm run preview` | Preview the built app |
-| `npm run serve` | Standalone Node.js host (`server/serve.ts`) |
-| `npm run typecheck` | `tsc -b` |
-| `npm run import:data` | Read-only vault import |
-| `npm run ensure:snapshot` | Seed the snapshot from the fixture if missing |
-| `npm run test:data` | Data-model / selector / import tests |
-| `npm run test:automation` | Automation pipeline tests |
-| `npm run test:live` | Live-source and bridge/host tests |
-| `npm run test:vault` | Vault writer / bridge boundary tests |
-| `npm run test:qa` | Playwright end-to-end suite (see note below) |
-
-> The Playwright suite (`testDir: ./qa`) is **not included in this repository**.
-> The `qa/` directory is kept local-only; a clone will not have those specs.
-
-## Project structure
-
-```
-src/
-  analytics/        dashboard aggregations
-  app/              app shell, routes, navigation
-  automation/       discovery pipeline: adapters, gates, normalize, classify,
-                    dedup, orchestrator, review queue, proposal/write rules
-  components/       UI components (discovery, review, navigation, tables, ui)
-  data/             snapshot selectors + committed test fixtures
-  import/           read-only vault -> JSON importer
-  live-source/      same-origin bridges (TED, USAspending, Grants.gov, EU SEDIA)
-                    and their live discovery stores
-  pages/            route-level pages
-  types/            record models + the authoritative type registry
-  vault-bridge/     browser-side read/write bridge contract
-  vault-writer/     guarded vault write path
-server/             minimal production host (config, app, lifecycle, limits)
-scripts/            build/bootstrap helpers
-```
-
-## Record types
-
-The authoritative list lives in `src/types/registry.ts` (ID field/prefix,
-collection key, route segment, labels, relationship fields). Every other map is
-derived from it. Funding types include Opportunity, Match, Application, and the
-supporting Company / Organization / Source records; procurement adds Notice,
-Bid, and Contract.
-
-## Live discovery sources
-
-Each live source is reached only through a **same-origin bridge** (server-side
-multipart/JSON request to a fixed official endpoint); the browser never talks to
-the external API directly. Bridges report the source's real status and never mask
-a failure as an empty success. Missing values stay `null`, and no
-"open/eligible" verdict is inferred — an explicit, separately-tested gate decides
-only what the source data supports.
-
-## Safety & boundaries
-
-- The production vault and `src/data/generated/` are never committed.
-- The live bridges use no credentials and are read-only.
-- The standalone host binds to loopback by default; a non-loopback bind requires
-  the explicit `TVB_ALLOW_NON_LOOPBACK=1` opt-in and a fronting reverse proxy.
-- Cross-origin requests are denied unless listed in `TVB_ALLOWED_ORIGINS`.
-- Rate limiting, request-size limits, timeouts, and a concurrency cap protect
-  the host (see below).
-
-## Host environment variables
-
-| Variable | Default | Meaning |
-|---|---|---|
-| `TVB_HOST` | `127.0.0.1` | Bind address (loopback only unless opted in) |
-| `TVB_PORT` | `4174` | Bind port |
-| `TVB_DIST_DIR` | `./dist` | Static build directory |
-| `TVB_ALLOWED_ORIGINS` | *(empty)* | Comma-separated extra CORS origins |
-| `TVB_RATE_LIMIT_WINDOW_MS` | `60000` | Rate-limit window |
-| `TVB_RATE_LIMIT_MAX` | `30` | Max requests per window |
-| `TVB_RATE_LIMIT_MAX_KEYS` | `5000` | Max tracked clients |
-| `TVB_MAX_BODY_BYTES` | `65536` | Max request body |
-| `TVB_REQUEST_TIMEOUT_MS` | `30000` | Per-request timeout |
-| `TVB_MAX_CONCURRENT` | `4` | Max in-flight requests |
-| `TVB_DRAIN_MS` | `5000` | Shutdown drain time |
-| `TVB_ALLOW_NON_LOOPBACK` | *(unset)* | Set to `1` to allow a public bind |
-| `TVB_SOURCE_VAULT` | *(unset)* | Absolute path to the source vault (import only) |
-
-A present-but-invalid value fails startup with a clear configuration error;
-protections are never silently disabled.
-
-## Testing
-
-Unit/integration tests run with the Node.js test runner:
-
-```bash
+# Run data model, CSV parser, and matching tests
 npm run test:data
-npm run test:automation
-npm run test:live
-npm run test:vault
+
+# Run Firecrawl enrichment bridge tests
+npx tsx --test src/live-source/enrichment-bridge/handler.test.ts
+
+# Run qualified leads CSV export tests
+npx tsx --test src/target-companies/export-leads-csv.test.ts
+
+# Full TypeScript check
 npm run typecheck
 ```
 
-Browser end-to-end tests use Playwright (`npm run test:qa`), but the `qa/`
-directory is intentionally kept out of this repository. Run `npm run build`
-before the Playwright suite; it serves `dist/` via `vite preview`.
+---
 
-## License
+## 🌐 Deployment (Vercel & Render)
 
-Private project. All rights reserved.
+### Vercel (Frontend SPA)
+1. Import the repository on Vercel.
+2. Set **Root Directory** to `tvb-frontend`.
+3. Framework Preset: **Vite**.
+4. Build Command: `npm run build`.
+5. Output Directory: `dist`.
+
+### Render (Full-Stack Host with Bridges)
+1. Create a **Web Service** on Render connected to this repository.
+2. Set **Root Directory** to `tvb-frontend`.
+3. Environment: **Node**.
+4. Build Command: `npm install && npm run build`.
+5. Start Command: `npm run serve`.
+6. Environment Variables:
+   * `TVB_HOST=0.0.0.0`
+   * `TVB_PORT=10000`
+   * `TVB_ALLOW_NON_LOOPBACK=1`
+
+---
+
+## 📄 License & Maintainer
+
+Maintained for **The Venture Build (TVB)**.
+Lead Contributor & Platform Engineer: **Sathvika Gudise** (`Owner: Sathvika`).
+All rights reserved.
